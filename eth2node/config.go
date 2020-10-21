@@ -2,6 +2,7 @@ package eth2node
 
 import (
 	"fmt"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/protolambda/zrnt/eth2/beacon"
 )
 
@@ -71,6 +72,12 @@ type Config struct {
 
 	// To coordinate work between all nodes
 	GENESIS_TIME uint64
+
+	DAS_SUBNET_TOPIC_SCORE_PARAMS    *pubsub.TopicScoreParams
+	SHARD_SUBNET_TOPIC_SCORE_PARAMS  *pubsub.TopicScoreParams
+	SHARD_HEADERS_TOPIC_SCORE_PARAMS *pubsub.TopicScoreParams
+	GOSSIP_GLOBAL_SCORE_PARAMS       *pubsub.PeerScoreParams
+	GOSSIP_GLOBAL_SCORE_THRESHOLDS   *pubsub.PeerScoreThresholds
 }
 
 func (c *Config) Expand() ExpandedConfig {

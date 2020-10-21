@@ -41,6 +41,12 @@ func das(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 		TARGET_PEERS_PER_DAS_SUB:              6,
 		PEER_COUNT_LO:                         (16 + 4) * 6, // TODO: educated guess
 		PEER_COUNT_HI:                         200,
+		// TODO: using no scoring / defaults now, can change this later.
+		DAS_SUBNET_TOPIC_SCORE_PARAMS:    nil,
+		SHARD_SUBNET_TOPIC_SCORE_PARAMS:  nil,
+		SHARD_HEADERS_TOPIC_SCORE_PARAMS: nil,
+		GOSSIP_GLOBAL_SCORE_PARAMS:       nil,
+		GOSSIP_GLOBAL_SCORE_THRESHOLDS:   nil,
 	}
 	// TODO: use Testground sync to learn all peer IDs and their addresses
 	disc := &eth2node.MockDiscovery{

@@ -99,6 +99,10 @@ func New(ctx context.Context, conf *Config, disc Discovery, log *zap.SugaredLogg
 		pubsub.WithNoAuthor(),
 		pubsub.WithMessageSignaturePolicy(pubsub.StrictNoSign),
 		pubsub.WithMessageIdFn(MsgIDFunction),
+		//pubsub.WithDiscovery(), // TODO could immplement this, may be smoother than current connection work
+	}
+	if conf.GOSSIP_GLOBAL_SCORE_PARAMS != nil && conf.GOSSIP_GLOBAL_SCORE_THRESHOLDS != nil {
+		psOptions = append(psOptions, pubsub.WithPeerScore(conf.GOSSIP_GLOBAL_SCORE_PARAMS, conf.GOSSIP_GLOBAL_SCORE_THRESHOLDS))
 	}
 
 	ps, err := pubsub.NewGossipSub(ctx, h, psOptions...)
@@ -298,6 +302,11 @@ func (n *Eth2Node) joinInitialTopics() error {
 			return fmt.Errorf("failed to prepare das subnet topic %d: %w", i, err)
 		}
 		go n.handleTopicEvents(name, t)
+		if n.conf.DAS_SUBNET_TOPIC_SCORE_PARAMS != nil {
+			if err := t.SetScoreParams(n.conf.DAS_SUBNET_TOPIC_SCORE_PARAMS); err != nil {
+				return errors.Wrap(err, "bad DAS subnet score params")
+			}
+		}
 		n.dasSubnets = append(n.dasSubnets, t)
 	}
 
@@ -313,6 +322,11 @@ func (n *Eth2Node) joinInitialTopics() error {
 			return fmt.Errorf("failed to prepare shard subnet topic %d: %w", i, err)
 		}
 		go n.handleTopicEvents(name, t)
+		if n.conf.SHARD_SUBNET_TOPIC_SCORE_PARAMS != nil {
+			if err := t.SetScoreParams(n.conf.SHARD_SUBNET_TOPIC_SCORE_PARAMS); err != nil {
+				return errors.Wrap(err, "bad shard subnet score params")
+			}
+		}
 		n.shardSubnets = append(n.shardSubnets, t)
 	}
 
@@ -327,6 +341,11 @@ func (n *Eth2Node) joinInitialTopics() error {
 			return fmt.Errorf("failed to prepare shard headers topic: %w", err)
 		}
 		go n.handleTopicEvents(name, t)
+		if n.conf.SHARD_HEADERS_TOPIC_SCORE_PARAMS != nil {
+			if err := t.SetScoreParams(n.conf.SHARD_HEADERS_TOPIC_SCORE_PARAMS); err != nil {
+				return errors.Wrap(err, "bad shard headers score params")
+			}
+		}
 		n.shardHeaders = t
 	}
 	return nil
