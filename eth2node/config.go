@@ -3,6 +3,7 @@ package eth2node
 import "fmt"
 
 type DASSubnetIndex uint64
+type Shard uint64
 type Slot uint64
 
 type Config struct {
@@ -22,11 +23,11 @@ type Config struct {
 	// Number of seconds in each slot
 	SECONDS_PER_SLOT uint64
 
-	// Maximum of how frequently one of the K subnets are randomly swapped.
+	// Maximum of how frequently one of the K dasSubnets are randomly swapped.
 	// Rotations of a subnet in K can happen any time between 1 and SLOTS_PER_K_ROTATION_MAX slots.
 	SLOTS_PER_K_ROTATION_MAX uint64
 
-	// How frequently each of the P subnets are randomly swapped.
+	// How frequently each of the P dasSubnets are randomly swapped.
 	// (deterministic on peer ID, so public and predictable)
 	// Offset logic is applied to avoid all P updating at once at an SLOTS_PER_P_ROTATION interval.
 	SLOTS_PER_P_ROTATION uint64
@@ -68,6 +69,14 @@ type ExpandedConfig struct {
 	AVERAGE_VALIDATORS_PER_NODE uint64
 }
 
+func (conf *ExpandedConfig) ShardHeadersTopic() string {
+	return fmt.Sprintf("/eth2/%x/shard_headers/ssz", conf.ForkDigest[:])
+}
+
 func (conf *ExpandedConfig) VertTopic(i DASSubnetIndex) string {
 	return fmt.Sprintf("/eth2/%x/das_vert_%d/ssz", conf.ForkDigest[:], i)
+}
+
+func (conf *ExpandedConfig) ShardTopic(i Shard) string {
+	return fmt.Sprintf("/eth2/%x/shard_%d/ssz", conf.ForkDigest[:], i)
 }

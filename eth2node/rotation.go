@@ -30,7 +30,7 @@ func (n *Eth2Node) rotatePSubnets(slot Slot) {
 			continue
 		}
 		// and sometimes we really do have to open a new subscription
-		t := n.subnets[subnet]
+		t := n.dasSubnets[subnet]
 		sub, err := t.Subscribe()
 		if err != nil {
 			n.log.With(zap.Error(err)).Error("failed to subscribe to das subnet as part of public duties")
@@ -39,7 +39,7 @@ func (n *Eth2Node) rotatePSubnets(slot Slot) {
 				subscribedAt: slot,
 				sub:          sub,
 			}
-			go n.handleSubnet(subnet, sub)
+			go n.dasHandleSubnet(subnet, sub)
 		}
 	}
 }

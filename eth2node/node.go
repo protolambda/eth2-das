@@ -41,13 +41,18 @@ type Eth2Node struct {
 	// to kill main loop
 	kill chan struct{}
 
-	// TODO track shard topics
+	// All SHARD_COUNT topics (joined but not necessarily subscribed)
+	shardSubnets []*pubsub.Topic
 
-	// All CHUNK_INDEX_SUBNETS topics (joined but not subscribed)
-	subnets []*pubsub.Topic
-	// currently publicly joined subnets
+	// All CHUNK_INDEX_SUBNETS topics (joined but not necessarily subscribed)
+	dasSubnets []*pubsub.Topic
+
+	// A singular topic used to message shard headers on.
+	shardHeaders *pubsub.Topic
+
+	// currently publicly joined dasSubnets
 	pIndices map[DASSubnetIndex]*subnetInfo
-	// currently randomly joined subnets
+	// currently randomly joined dasSubnets
 	kIndices map[DASSubnetIndex]*subnetInfo
 }
 
@@ -182,10 +187,12 @@ func (n *Eth2Node) publicDasSubset(slot Slot) map[DASSubnetIndex]struct{} {
 
 // joinInitialTopics does not subscribe to topics, it just makes the handles to them available for later use.
 func (n *Eth2Node) joinInitialTopics() error {
-	n.subnets = make([]*pubsub.Topic, 0, n.conf.CHUNK_INDEX_SUBNETS)
+
+	// init DAS subnets
+	n.dasSubnets = make([]*pubsub.Topic, 0, n.conf.CHUNK_INDEX_SUBNETS)
 	for i := DASSubnetIndex(0); i < DASSubnetIndex(n.conf.CHUNK_INDEX_SUBNETS); i++ {
 		name := n.conf.VertTopic(i)
-		if err := n.ps.RegisterTopicValidator(name, n.subnetValidator(i)); err != nil {
+		if err := n.ps.RegisterTopicValidator(name, n.dasSubnetValidator(i)); err != nil {
 			return fmt.Errorf("failed to create validator for das subnet topic %d: %w", i, err)
 		}
 		t, err := n.ps.Join(name)
@@ -193,7 +200,36 @@ func (n *Eth2Node) joinInitialTopics() error {
 			return fmt.Errorf("failed to prepare das subnet topic %d: %w", i, err)
 		}
 		go n.handleTopicEvents(name, t)
-		n.subnets = append(n.subnets, t)
+		n.dasSubnets = append(n.dasSubnets, t)
+	}
+
+	// init shard subnets
+	n.shardSubnets = make([]*pubsub.Topic, 0, n.conf.SHARD_COUNT)
+	for i := Shard(0); i < Shard(n.conf.SHARD_COUNT); i++ {
+		name := n.conf.ShardTopic(i)
+		if err := n.ps.RegisterTopicValidator(name, n.shardSubnetValidator(i)); err != nil {
+			return fmt.Errorf("failed to create validator for shard subnet topic %d: %w", i, err)
+		}
+		t, err := n.ps.Join(name)
+		if err != nil {
+			return fmt.Errorf("failed to prepare shard subnet topic %d: %w", i, err)
+		}
+		go n.handleTopicEvents(name, t)
+		n.shardSubnets = append(n.shardSubnets, t)
+	}
+
+	// init shard headers topic
+	{
+		name := n.conf.ShardHeadersTopic()
+		if err := n.ps.RegisterTopicValidator(name, n.shardHeaderValidator()); err != nil {
+			return fmt.Errorf("failed to create validator for shard headers topic: %w", err)
+		}
+		t, err := n.ps.Join(name)
+		if err != nil {
+			return fmt.Errorf("failed to prepare shard headers topic: %w", err)
+		}
+		go n.handleTopicEvents(name, t)
+		n.shardHeaders = t
 	}
 	return nil
 }

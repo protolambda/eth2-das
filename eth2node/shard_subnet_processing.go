@@ -7,14 +7,14 @@ import (
 	"go.uber.org/zap"
 )
 
-func (n *Eth2Node) subnetValidator(index DASSubnetIndex) pubsub.ValidatorEx {
+func (n *Eth2Node) shardSubnetValidator(index Shard) pubsub.ValidatorEx {
 	return func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
 		// TODO subnet validation
 		return pubsub.ValidationAccept
 	}
 }
 
-func (n *Eth2Node) handleSubnet(index DASSubnetIndex, sub *pubsub.Subscription) {
+func (n *Eth2Node) shardHandleSubnet(index Shard, sub *pubsub.Subscription) {
 	{
 		msg, err := sub.Next(n.subProcesses.ctx)
 		if err != nil {
