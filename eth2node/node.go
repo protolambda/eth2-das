@@ -13,9 +13,11 @@ import (
 	pubsub_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	basichost "github.com/libp2p/go-libp2p/p2p/host/basic"
 	"github.com/libp2p/go-tcp-transport"
+	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"math"
+	"net"
 	"time"
 )
 
@@ -25,7 +27,13 @@ type subnetInfo struct {
 }
 
 type Eth2Node struct {
-	log  *zap.SugaredLogger
+	log *zap.SugaredLogger
+
+	subProcesses struct {
+		ctx    context.Context
+		cancel context.CancelFunc
+	}
+
 	h    host.Host
 	ps   *pubsub.PubSub
 	conf ExpandedConfig
@@ -70,8 +78,14 @@ func New(ctx context.Context, conf *Config, log *zap.SugaredLogger) (*Eth2Node, 
 		return nil, errors.Wrap(err, "failed gossipsub init")
 	}
 
+	subCtx, subCancel := context.WithCancel(context.Background())
+
 	expandedConf := conf.Expand()
 	n := &Eth2Node{
+		subProcesses: struct {
+			ctx    context.Context
+			cancel context.CancelFunc
+		}{ctx: subCtx, cancel: subCancel},
 		h:        h,
 		ps:       ps,
 		conf:     expandedConf,
@@ -86,9 +100,23 @@ func New(ctx context.Context, conf *Config, log *zap.SugaredLogger) (*Eth2Node, 
 	return n, nil
 }
 
-func (n *Eth2Node) Start() {
+func (n *Eth2Node) Start(ip net.IP, port uint64) error {
+	ipScheme := "ip4"
+	if ip4 := ip.To4(); ip4 == nil {
+		ipScheme = "ip6"
+	} else {
+		ip = ip4
+	}
+	mAddr, err := ma.NewMultiaddr(fmt.Sprintf("/%s/%s/tcp/%d", ipScheme, ip.String(), port))
+	if err != nil {
+		return errors.Wrap(err, "could not construct multi addr")
+	}
 	n.log.Info("starting node!")
+	if err := n.h.Network().Listen(mAddr); err != nil {
+		return errors.Wrap(err, "failed to bind to network interface")
+	}
 	go n.processLoop()
+	return nil
 }
 
 func (n *Eth2Node) processLoop() {
@@ -144,6 +172,7 @@ func (n *Eth2Node) Close() error {
 	// close processing loop with a channel join
 	n.kill <- struct{}{}
 	close(n.kill)
+	n.subProcesses.cancel()
 	return n.h.Close()
 }
 
@@ -154,14 +183,41 @@ func (n *Eth2Node) publicDasSubset(slot Slot) map[DASSubnetIndex]struct{} {
 // joinInitialTopics does not subscribe to topics, it just makes the handles to them available for later use.
 func (n *Eth2Node) joinInitialTopics() error {
 	n.subnets = make([]*pubsub.Topic, 0, n.conf.CHUNK_INDEX_SUBNETS)
-	for i := uint64(0); i < n.conf.CHUNK_INDEX_SUBNETS; i++ {
-		t, err := n.ps.Join(fmt.Sprintf("/eth2/%x/das_vert/ssz", n.conf.ForkDigest[:]))
+	for i := DASSubnetIndex(0); i < DASSubnetIndex(n.conf.CHUNK_INDEX_SUBNETS); i++ {
+		name := n.conf.VertTopic(i)
+		if err := n.ps.RegisterTopicValidator(name, n.subnetValidator(i)); err != nil {
+			return fmt.Errorf("failed to create validator for das subnet topic %d: %w", i, err)
+		}
+		t, err := n.ps.Join(name)
 		if err != nil {
 			return fmt.Errorf("failed to prepare das subnet topic %d: %w", i, err)
 		}
+		go n.handleTopicEvents(name, t)
 		n.subnets = append(n.subnets, t)
 	}
 	return nil
+}
+
+func (n *Eth2Node) handleTopicEvents(name string, t *pubsub.Topic) {
+	evs, err := t.EventHandler()
+	if err != nil {
+		n.log.With("topic", name).With(zap.Error(err)).Warn("failed to listen for topic events")
+		return
+	}
+	for {
+		ev, err := evs.NextPeerEvent(n.subProcesses.ctx)
+		if err != nil {
+			return // context timeout/cancel
+		}
+		switch ev.Type {
+		case pubsub.PeerJoin:
+			n.log.With("peer", ev.Peer.String(), "topic", name).Debug("peer JOIN")
+		case pubsub.PeerLeave:
+			n.log.With("peer", ev.Peer.String(), "topic", name).Debug("peer LEAVE")
+		default:
+			n.log.With("peer", ev.Peer.String(), "topic", name).Warn("unknown topic event")
+		}
+	}
 }
 
 func MsgIDFunction(pmsg *pubsub_pb.Message) string {

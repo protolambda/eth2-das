@@ -1,5 +1,6 @@
 package eth2node
 
+import "fmt"
 
 type DASSubnetIndex uint64
 type Slot uint64
@@ -67,3 +68,6 @@ type ExpandedConfig struct {
 	AVERAGE_VALIDATORS_PER_NODE uint64
 }
 
+func (conf *ExpandedConfig) VertTopic(i DASSubnetIndex) string {
+	return fmt.Sprintf("/eth2/%x/das_vert_%d/ssz", conf.ForkDigest[:], i)
+}

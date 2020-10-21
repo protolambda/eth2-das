@@ -39,6 +39,7 @@ func (n *Eth2Node) rotatePSubnets(slot Slot) {
 				subscribedAt: slot,
 				sub:          sub,
 			}
+			go n.handleSubnet(subnet, sub)
 		}
 	}
 }

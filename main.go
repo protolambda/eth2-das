@@ -6,6 +6,7 @@ import (
 	"github.com/protolambda/eth2-das/eth2node"
 	"github.com/testground/sdk-go/run"
 	"github.com/testground/sdk-go/runtime"
+	"net"
 	"time"
 )
 
@@ -39,7 +40,9 @@ func das(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 		return errors.Wrap(err, "failed to start eth2 node")
 	}
 
-	n.Start()
+	if err := n.Start(net.IPv4zero, 9000); err != nil {
+		return errors.Wrap(err, "failed to start node")
+	}
 
 	// TODO configure test time
 	time.Sleep(time.Minute * 10)
