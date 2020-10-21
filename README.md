@@ -131,6 +131,20 @@ register themselves on short notice to be sampling a random subset.
 The shard blocks are split up in chunks, and should reach the validators with relatively low latency.
 
 
+### DAS subnet discovery
+
+The node uses a simple discovery interface:
+```python
+class Discovery(Protocol):
+	def find_public(conf: Config, slot: Slot, subnets: Set[DASSubnetIndex]) -> Dict[DASSubnetIndex, Set[PeerID]]: ...
+	def addrs(id: PeerID) -> List[Multiaddr]: ...
+
+```
+
+It lists possible candidates for each subnet, based on public subnet info known of the peers: their `P` subset.
+
+In preparation of rotation of subnets, the Eth2 node can then try to peer with peers that complement their current peers,
+ to allow gossipsub to build a mesh for the topic.
 
 ## License
 

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"github.com/libp2p/go-libp2p-core/peer"
+	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
 	"github.com/protolambda/eth2-das/eth2node"
 	"github.com/protolambda/zrnt/eth2/beacon"
@@ -37,7 +39,11 @@ func das(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 		VALIDATOR_COUNT:                       150000, // TODO
 		NODE_COUNT:                            10000,  // TODO
 	}
-	n, err := eth2node.New(ctx, conf, runenv.SLogger())
+	// TODO: use Testground sync to learn all peer IDs and their addresses
+	disc := &eth2node.MockDiscovery{
+		Peers: make(map[peer.ID][]ma.Multiaddr),
+	}
+	n, err := eth2node.New(ctx, conf, disc, runenv.SLogger())
 	if err != nil {
 		return errors.Wrap(err, "failed to start eth2 node")
 	}

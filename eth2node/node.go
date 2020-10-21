@@ -37,6 +37,7 @@ type Eth2Node struct {
 
 	h    host.Host
 	ps   *pubsub.PubSub
+	disc Discovery
 	conf ExpandedConfig
 
 	// to kill main loop
@@ -61,7 +62,7 @@ type Eth2Node struct {
 	kIndices map[DASSubnetIndex]*subnetInfo
 }
 
-func New(ctx context.Context, conf *Config, log *zap.SugaredLogger) (*Eth2Node, error) {
+func New(ctx context.Context, conf *Config, disc Discovery, log *zap.SugaredLogger) (*Eth2Node, error) {
 	options := []libp2p.Option{
 		libp2p.Transport(tcp.NewTCPTransport),
 		libp2p.Muxer("/mplex/6.7.0", mplex.DefaultTransport),
@@ -98,6 +99,7 @@ func New(ctx context.Context, conf *Config, log *zap.SugaredLogger) (*Eth2Node, 
 		}{ctx: subCtx, cancel: subCancel},
 		h:               h,
 		ps:              ps,
+		disc:            disc,
 		conf:            expandedConf,
 		localValidators: make(map[ValidatorIndex]struct{}),
 		pIndices:        make(map[DASSubnetIndex]*subnetInfo),
