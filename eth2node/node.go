@@ -15,6 +15,8 @@ import (
 	"github.com/libp2p/go-tcp-transport"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"math"
+	"time"
 )
 
 type DASSubnetIndex uint64
@@ -62,6 +64,9 @@ type Config struct {
 
 	// Fork digest, put in the topic names
 	ForkDigest [4]byte
+
+	// To coordinate work between all nodes
+	GENESIS_TIME uint64
 }
 
 func (c *Config) Expand() ExpandedConfig {
@@ -139,6 +144,7 @@ func New(ctx context.Context, conf *Config, log *zap.SugaredLogger) (*Eth2Node, 
 		pIndices: make(map[DASSubnetIndex]*subnetInfo),
 		kIndices: make(map[DASSubnetIndex]*subnetInfo),
 		log:      log,
+		kill:     make(chan struct{}),
 	}
 	if err := n.joinInitialTopics(); err != nil {
 		return nil, err
@@ -147,21 +153,68 @@ func New(ctx context.Context, conf *Config, log *zap.SugaredLogger) (*Eth2Node, 
 }
 
 func (n *Eth2Node) Start() {
+	n.log.Info("starting node!")
+	go n.processLoop()
+}
 
+func (n *Eth2Node) processLoop() {
+	slotDuration := time.Second * time.Duration(n.conf.SECONDS_PER_SLOT)
+
+	genesisTime := time.Unix(int64(n.conf.GENESIS_TIME), 0)
+
+	// adjust the timer to be exactly at the slot boundary
+	d := time.Since(genesisTime) % slotDuration
+	if d < 0 {
+		d += slotDuration
+	}
+
+	// creates a ticker, aligned with genesis slot, ticking every interval, and with some offset to genesis.
+	tickerWithOffset := func(interval time.Duration, offset time.Duration) *time.Ticker {
+		ticker := time.NewTicker(interval)
+		ticker.Reset(d + offset)
+		return ticker
+	}
+
+	// Note that slot ticker can adjust itself and drop slots, if the receiver is slow (i.e. when under heavy load)
+	slotTicker := tickerWithOffset(slotDuration, 0)
+	defer slotTicker.Stop()
+
+	// TODO schedule work publishing etc.
+	//workTicker := tickerWithOffset(slotDuration, slotDuration / 3)
+
+	for {
+		select {
+		case _, _ = <-n.kill:
+			n.log.Info("stopping work, goodbye!")
+			return
+		case <-slotTicker.C: // schedules genesis
+			t := time.Since(genesisTime)
+			slotFloat := math.Round(t.Seconds() / float64(n.conf.SECONDS_PER_SLOT))
+			if slotFloat < 0 {
+				// waiting for genesis, countdown every slot near the end.
+				if remaining := uint64(-slotFloat); remaining%10 == 0 || remaining < 10 {
+					n.log.With("genesis_time", n.conf.GENESIS_TIME, "slots", remaining).Info("Genesis countdown...")
+				}
+				continue
+			}
+			slot := Slot(slotFloat)
+			n.log.With("slot", slot).Debug("slot event!")
+
+			n.rotatePSubnets(slot)
+			n.rotateKSubnets(slot)
+		}
+	}
 }
 
 func (n *Eth2Node) Close() error {
 	// close processing loop with a channel join
 	n.kill <- struct{}{}
+	close(n.kill)
 	return n.h.Close()
 }
 
 func (n *Eth2Node) publicDasSubset(slot Slot) map[DASSubnetIndex]struct{} {
 	return n.conf.DasPublicSubnetIndices(n.h.ID(), slot, n.conf.P)
-}
-
-func (n *Eth2Node) onSlot(slot uint64) {
-
 }
 
 // joinInitialTopics does not subscribe to topics, it just makes the handles to them available for later use.

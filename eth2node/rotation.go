@@ -3,6 +3,7 @@ package eth2node
 import "go.uber.org/zap"
 
 // rotatePSubnets rotates the subscriptions for topics we are on, called by the main loop every slot.
+// It can handle skipped slots, and will robustly match slot expectations
 func (n *Eth2Node) rotatePSubnets(slot Slot) {
 	newSubnets := n.publicDasSubset(slot)
 
@@ -42,7 +43,7 @@ func (n *Eth2Node) rotatePSubnets(slot Slot) {
 	}
 }
 
-func (n *Eth2Node) rotateKSubnets() {
+func (n *Eth2Node) rotateKSubnets(slot Slot) {
 	// swap a 1/K randomly, with something that is not already in our public subnet indices
 	// TODO
 }

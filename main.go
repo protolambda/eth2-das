@@ -39,7 +39,7 @@ func das(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 		return errors.Wrap(err, "failed to start eth2 node")
 	}
 
-	go n.Start()
+	n.Start()
 
 	// TODO configure test time
 	time.Sleep(time.Minute * 10)
