@@ -61,6 +61,10 @@ Don't take values as canonical. The point is to find good values.
 | `SLOTS_PER_P_ROTATION` | `320` | slots | How frequently each of the P dasSubnets are randomly swapped. (deterministic on peer ID, so public and predictable) |
 | `SLOT_OFFSET_PER_P_INDEX` | `16` | slots | SLOT_OFFSET_PER_P_INDEX is the time for an index of P to wait for the previous index to rotate. |
 | `EPOCHS_PER_RANDOM_SUBNET_SUBSCRIPTION` | `256` | epochs | how frequently shard subnet subscriptions are kept |
+| `TARGET_PEERS_PER_DAS_SUB` | `6` | peers | How many peers should be acquired per topic. If insufficient, search for more with discovery. |
+| `PEER_COUNT_LO` | `120` | peers | How many peers for low-water |
+| `PEER_COUNT_HI` | `200` | peers | How many peers to maintain for hi-water |
+
 
 #### Estimates for emulation purposes
 

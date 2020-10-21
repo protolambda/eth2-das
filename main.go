@@ -38,6 +38,9 @@ func das(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 		EPOCHS_PER_RANDOM_SUBNET_SUBSCRIPTION: 256,
 		VALIDATOR_COUNT:                       150000, // TODO
 		NODE_COUNT:                            10000,  // TODO
+		TARGET_PEERS_PER_DAS_SUB:              6,
+		PEER_COUNT_LO:                         (16 + 4) * 6, // TODO: educated guess
+		PEER_COUNT_HI:                         200,
 	}
 	// TODO: use Testground sync to learn all peer IDs and their addresses
 	disc := &eth2node.MockDiscovery{

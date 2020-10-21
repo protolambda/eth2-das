@@ -57,6 +57,18 @@ type Config struct {
 	// Fork digest, put in the topic names
 	ForkDigest [4]byte
 
+	// How many peers we should try to maintain for each of the P and K subnets, when to hit discovery.
+	// Gossipsub will do some peer management for us too, but may not find peers as quickly.
+	TARGET_PEERS_PER_DAS_SUB uint64
+	// The Low water should be at least TARGET_PEERS_PER_DAS_SUB * (P + K)
+	// if CHUNK_INDEX_SUBNETS is very large compared to (P + K).
+	// However, peers may cover multiple of our P and K topics, so it is OK to have a little less.
+	// We could try and optimize by selecting good short-term peers from the backbone that cover multiple topic needs,
+	// but that seems fragile.
+	PEER_COUNT_LO uint64
+	// When HI is hit, peers will be pruned back to LO. This pruning happens on a long interval, and is not a hard limit.
+	PEER_COUNT_HI uint64
+
 	// To coordinate work between all nodes
 	GENESIS_TIME uint64
 }

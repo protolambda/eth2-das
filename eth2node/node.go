@@ -6,7 +6,9 @@ import (
 	"encoding/base64"
 	"fmt"
 	"github.com/libp2p/go-libp2p"
+	connmgr "github.com/libp2p/go-libp2p-connmgr"
 	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p-core/peer"
 	mplex "github.com/libp2p/go-libp2p-mplex"
 	noise "github.com/libp2p/go-libp2p-noise"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -21,6 +23,11 @@ import (
 	"sync"
 	"time"
 )
+
+const connectionTimeout = time.Second * 10
+
+// Minimum time a peer stays safe from the peer manager pruning
+const pruneGrace = time.Second * 20
 
 type subnetInfo struct {
 	subscribedAt Slot
@@ -49,6 +56,9 @@ type Eth2Node struct {
 	// to kill main loop
 	kill chan struct{}
 
+	// Queue of requests to peer with others
+	dialReq chan peer.ID
+
 	// Set of validator indices that runs on this node
 	localValidators map[ValidatorIndex]struct{}
 	validatorsLock  sync.RWMutex
@@ -74,6 +84,7 @@ func New(ctx context.Context, conf *Config, disc Discovery, log *zap.SugaredLogg
 		libp2p.Muxer("/mplex/6.7.0", mplex.DefaultTransport),
 		libp2p.Security(noise.ID, noise.New),
 		libp2p.NATManager(basichost.NewNATManager),
+		libp2p.ConnectionManager(connmgr.NewConnManager(int(conf.PEER_COUNT_LO), int(conf.PEER_COUNT_HI), pruneGrace)),
 		// memory peerstore by default
 		// random identity by default
 		libp2p.Ping(false),
@@ -107,6 +118,7 @@ func New(ctx context.Context, conf *Config, disc Discovery, log *zap.SugaredLogg
 		ps:              ps,
 		disc:            disc,
 		conf:            expandedConf,
+		dialReq:         make(chan peer.ID, 30), // don't try to schedule too many dials at a time.
 		localValidators: make(map[ValidatorIndex]struct{}),
 		pIndices:        make(map[DASSubnetIndex]*subnetInfo),
 		kIndices:        make(map[DASSubnetIndex]*subnetKInfo),
@@ -219,6 +231,7 @@ func (n *Eth2Node) processLoop() {
 
 			n.rotatePSubnets(slot)
 			n.rotateKSubnets(slot)
+			n.peersUpdate(slot)
 		case t := <-workTicker.C:
 			// 1/3 before every slot, prepare and schedule shard blocks
 			slot, preGenesis := n.slotWithOffset(t, slotDuration/3)
@@ -226,6 +239,19 @@ func (n *Eth2Node) processLoop() {
 				continue
 			}
 			n.scheduleShardProposalsMaybe(slot)
+		case id := <-n.dialReq:
+			addrs := n.disc.Addrs(id)
+			addrInfo := peer.AddrInfo{Addrs: addrs, ID: id}
+			connectCtx, _ := context.WithTimeout(n.subProcesses.ctx, connectionTimeout)
+			go func(ctx context.Context, addrInfo peer.AddrInfo) {
+				n.log.With("peer_id", addrInfo.ID).Debug("connecting to peer")
+				err := n.h.Connect(ctx, addrInfo)
+				if err != nil {
+					n.log.With("peer_id", addrInfo.ID, zap.Error(err)).Warn("failed to connect to peer")
+				} else {
+					n.log.With("peer_id", addrInfo.ID).Debug("success, connected to peer")
+				}
+			}(connectCtx, addrInfo)
 		}
 	}
 }
