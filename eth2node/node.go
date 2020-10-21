@@ -27,6 +27,12 @@ type subnetInfo struct {
 	sub          *pubsub.Subscription
 }
 
+type subnetKInfo struct {
+	subnetInfo
+	// when the subnet subscription should be rotated for something else
+	expiry Slot
+}
+
 type Eth2Node struct {
 	log *zap.SugaredLogger
 
@@ -59,7 +65,7 @@ type Eth2Node struct {
 	// currently publicly joined dasSubnets
 	pIndices map[DASSubnetIndex]*subnetInfo
 	// currently randomly joined dasSubnets
-	kIndices map[DASSubnetIndex]*subnetInfo
+	kIndices map[DASSubnetIndex]*subnetKInfo
 }
 
 func New(ctx context.Context, conf *Config, disc Discovery, log *zap.SugaredLogger) (*Eth2Node, error) {
@@ -103,7 +109,7 @@ func New(ctx context.Context, conf *Config, disc Discovery, log *zap.SugaredLogg
 		conf:            expandedConf,
 		localValidators: make(map[ValidatorIndex]struct{}),
 		pIndices:        make(map[DASSubnetIndex]*subnetInfo),
-		kIndices:        make(map[DASSubnetIndex]*subnetInfo),
+		kIndices:        make(map[DASSubnetIndex]*subnetKInfo),
 		log:             log,
 		kill:            make(chan struct{}),
 	}

@@ -32,7 +32,7 @@ type Config struct {
 	SECONDS_PER_SLOT uint64
 
 	// Maximum of how frequently one of the K dasSubnets are randomly swapped.
-	// Rotations of a subnet in K can happen any time between 1 and SLOTS_PER_K_ROTATION_MAX slots.
+	// Rotations of a subnet in K can happen any time between 1 and SLOTS_PER_K_ROTATION_MAX (incl) slots.
 	SLOTS_PER_K_ROTATION_MAX uint64
 
 	// How frequently each of the P dasSubnets are randomly swapped.
@@ -62,9 +62,13 @@ type Config struct {
 }
 
 func (c *Config) Expand() ExpandedConfig {
+	subnets := c.MAX_BLOCK_SIZE / c.CHUNK_SIZE
+	if c.K+c.P > subnets {
+		panic("invalid configuration! Need K + P <= CHUNK_INDEX_SUBNETS")
+	}
 	return ExpandedConfig{
 		Config:                      *c,
-		CHUNK_INDEX_SUBNETS:         c.MAX_BLOCK_SIZE / c.CHUNK_SIZE,
+		CHUNK_INDEX_SUBNETS:         subnets,
 		AVERAGE_VALIDATORS_PER_NODE: c.VALIDATOR_COUNT / c.NODE_COUNT,
 	}
 }

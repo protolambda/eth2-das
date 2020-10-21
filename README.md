@@ -57,7 +57,7 @@ Don't take values as canonical. The point is to find good values.
 
 | Name | Planned Value | Unit | Description |
 | - | - | - | - |
-| `SLOTS_PER_K_ROTATION_MAX` | `32` | slots | Maximum of how frequently one of the K dasSubnets are randomly swapped. Rotations of a subnet in K can happen any time between 1 and SLOTS_PER_K_ROTATION_MAX slots. |
+| `SLOTS_PER_K_ROTATION_MAX` | `32` | slots | Maximum of how frequently one of the K dasSubnets are randomly swapped. Rotations of a subnet in K can happen any time between 1 and SLOTS_PER_K_ROTATION_MAX (incl) slots. |
 | `SLOTS_PER_P_ROTATION` | `320` | slots | How frequently each of the P dasSubnets are randomly swapped. (deterministic on peer ID, so public and predictable) |
 | `SLOT_OFFSET_PER_P_INDEX` | `16` | slots | SLOT_OFFSET_PER_P_INDEX is the time for an index of P to wait for the previous index to rotate. |
 | `EPOCHS_PER_RANDOM_SUBNET_SUBSCRIPTION` | `256` | epochs | how frequently shard subnet subscriptions are kept |
