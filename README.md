@@ -119,8 +119,6 @@ The idea of making `P` slow, public and predictable is:
 
 ### Private DAS subnet sampling, a.k.a. `K`
 
-TODO, work in progress.
-
 For the random sampling, `K` subnets are joined randomly,
 selected out of the total `CHUNK_INDEX_SUBNETS`, except for what is already joined publicly (`P`).
 
@@ -130,6 +128,51 @@ This effectively creates a PUSH model where validators
 register themselves on short notice to be sampling a random subset.
 The shard blocks are split up in chunks, and should reach the validators with relatively low latency.
 
+**Note: depending on test results, a larger K may be set, but for any topics that are subscribed to in e.g. 
+the last few slots won't count as heavy towards bad data availability,
+as it may just be an issue to subscribe to the topic fast enough.**
+
+
+```python
+class KInfo:
+    sub: Subscription
+    expiry: Slot
+
+def random_subnet() -> DASSubnetIndex:
+    return DASSubnetIndex(random_uint64() % CHUNK_INDEX_SUBNETS)
+
+def random_expiry(now: Slot) -> Slot:
+    return now + 1 + Slot(random_uint64() % SLOTS_PER_K_ROTATION_MAX)
+
+def das_private_subnets_update(
+    current_k: Dict[DASSubnetIndex, KInfo],
+    current_p: Dict[DASSubnetIndex, Subscription],
+    slot: Slot):
+
+    old: Dict[DASSubnetIndex, Subscription] = {}
+    for subnet, info in current_k.items():
+        if info.expiry <= slot:
+            old[subnet] = info.sub
+            current_k.remove(subnet)
+    # By trial and error, backfill k
+    while len(current_k) < K:
+        while True:
+            subnet = random_subnet()
+            if subnet in current_k:
+                continue
+            if subnet in current_p:
+                continue
+            if subnet in old:
+                old.remove(subnet)
+                current_k[subnet] = KInfo(sub=old[subnet], expiry=random_expiry(slot))
+            else:
+                sub = subcribe(subnet)
+                current_k[subnet] = KInfo(sub=sub, expiry=random_expiry(slot))
+            break
+    # unsubscribe from remaining old topics
+    for sub in old:
+        sub.unsubscribe()
+```
 
 ### DAS subnet discovery
 

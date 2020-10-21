@@ -58,6 +58,9 @@ func (n *Eth2Node) rotatePSubnets(slot Slot) {
 	}
 }
 
+// rotateKSubnets, like rotatePSubnets, rotates subnets and does so robustly.
+// But instead of deterministically and publicly predictable subscribing, it is based on private local randomness.
+// Subscriptions in K won't overlap with those in P, to avoid double work.
 func (n *Eth2Node) rotateKSubnets(slot Slot) {
 	// Swap things as scheduled, with something that is not already in our public subnet indices
 
@@ -104,11 +107,13 @@ func (n *Eth2Node) rotateKSubnets(slot Slot) {
 			if v, ok := old[subnet]; ok {
 				delete(old, subnet)
 
+				n.log.With("subnet", subnet, "slot", slot).Debug("re-subscribing to K subnet")
 				n.kIndices[subnet] = &subnetKInfo{
 					subnetInfo: *v,             // same old subnet
 					expiry:     randomExpiry(), // new expiry time
 				}
 			} else {
+				n.log.With("subnet", subnet, "slot", slot).Debug("subscribing to new K subnet")
 				t := n.dasSubnets[subnet]
 				sub, err := t.Subscribe() // the new subnet!
 				if err != nil {
@@ -126,5 +131,11 @@ func (n *Eth2Node) rotateKSubnets(slot Slot) {
 			}
 			break
 		}
+	}
+
+	// for any old subnets that were not reused, unsubscribe
+	for subnet, info := range old {
+		n.log.With("subnet", subnet, "slot", slot).Debug("unsubscribing from K subnet")
+		info.sub.Cancel()
 	}
 }

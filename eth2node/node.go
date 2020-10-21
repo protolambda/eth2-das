@@ -151,6 +151,8 @@ func (n *Eth2Node) Start(ip net.IP, port uint64) error {
 	if err := n.h.Network().Listen(mAddr); err != nil {
 		return errors.Wrap(err, "failed to bind to network interface")
 	}
+
+	// This initializes the initial P and K subscriptions
 	if err := n.initialSubscriptions(); err != nil {
 		return errors.Wrap(err, "failed to open initial subscriptions")
 	}
