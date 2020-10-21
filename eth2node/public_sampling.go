@@ -6,36 +6,6 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 )
 
-// Public indices are sampled as:
-//
-// def das_public_peer_seed(peer_id: PeerID) -> Bytes32:
-//   return H(PUBLIC_DAS_SUBNETS_DOMAIN ++ peer_id)
-//
-// def das_public_peer_slot_offset(peer_seed) -> Slot:
-//   return Slot(peer_seed[:8] % SLOTS_PER_P_ROTATION)
-//
-// def das_public_subnet_slot_offset(i: DASSubnetIndex) -> Slot:
-//   return Slot(i * SLOT_OFFSET_PER_P_INDEX) % SLOTS_PER_P_ROTATION
-//
-// def das_public_subnet_index(peer_seed: Bytes32, slot: Slot, i: uint64) -> DASSubnetIndex:
-//   window_index = slot ~/ SLOTS_PER_P_ROTATION
-//   return H(peer_seed ++ i ++ window_index)[:8] % CHUNK_INDEX_SUBNETS
-//
-// def das_public_subnet_indices(peer_id: PeerID, slot: Slot, das_p: uint64) -> Set[DASSubnetIndex]:
-//   peer_seed = das_public_peer_seed(peer_id)
-//   peer_offset = das_public_peer_slot_offset(peer_seed)
-//   return set(
-//  		das_public_subnet_index(
-// 				peer_seed,
-//				slot + peer_offset + das_public_subnet_slot_offset(i),
-//				i,
-//			) for i in range(das_p))
-//
-// p_indices = das_public_subnet_indices(peer_id, slot, P)
-//
-// Any overlap in p_indices is rare, and acceptable. The set will be a little smaller sometimes.
-//
-
 // DasPublicPeerSeed defines a seed specific to the peer.
 // So that its selection of P dasSubnets is different from other honest peers, and predictable.
 func (conf *ExpandedConfig) DasPublicPeerSeed(id peer.ID) (out [32]byte) {

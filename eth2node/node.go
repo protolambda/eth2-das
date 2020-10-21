@@ -143,8 +143,26 @@ func (n *Eth2Node) Start(ip net.IP, port uint64) error {
 	if err := n.h.Network().Listen(mAddr); err != nil {
 		return errors.Wrap(err, "failed to bind to network interface")
 	}
+	if err := n.initialSubscriptions(); err != nil {
+		return errors.Wrap(err, "failed to open initial subscriptions")
+	}
 	go n.processLoop()
 	return nil
+}
+
+func (n *Eth2Node) slotWithOffset(t time.Time, offset time.Duration) (slot Slot, preGenesis bool) {
+	genesisTime := time.Unix(int64(n.conf.GENESIS_TIME), 0)
+	sinceGenesis := t.Add(offset).Sub(genesisTime)
+	slotFloat := math.Round(sinceGenesis.Seconds() / float64(n.conf.SECONDS_PER_SLOT))
+	if slotFloat < 0 {
+		return Slot(uint64(-slotFloat)), true
+	} else {
+		return Slot(uint64(slotFloat)), false
+	}
+}
+
+func (n *Eth2Node) slotNow() (slot Slot, preGenesis bool) {
+	return n.slotWithOffset(time.Now(), 0)
 }
 
 func (n *Eth2Node) processLoop() {
@@ -165,15 +183,6 @@ func (n *Eth2Node) processLoop() {
 		return ticker
 	}
 
-	slotWithOffset := func(t time.Time, offset time.Duration) (slot Slot, preGenesis bool) {
-		sinceGenesis := t.Add(offset).Sub(genesisTime)
-		slotFloat := math.Round(sinceGenesis.Seconds() / float64(n.conf.SECONDS_PER_SLOT))
-		if slotFloat < 0 {
-			return Slot(uint64(-slotFloat)), true
-		} else {
-			return Slot(uint64(slotFloat)), false
-		}
-	}
 	// Note that slot ticker can adjust itself and drop slots, if the receiver is slow (i.e. when under heavy load)
 	slotTicker := tickerWithOffset(slotDuration, 0)
 	defer slotTicker.Stop()
@@ -187,7 +196,7 @@ func (n *Eth2Node) processLoop() {
 			n.log.Info("stopping work, goodbye!")
 			return
 		case t := <-slotTicker.C: // schedules genesis
-			slot, preGenesis := slotWithOffset(t, 0)
+			slot, preGenesis := n.slotWithOffset(t, 0)
 
 			if preGenesis {
 				// waiting for genesis, countdown every slot near the end.
@@ -202,7 +211,7 @@ func (n *Eth2Node) processLoop() {
 			n.rotateKSubnets(slot)
 		case t := <-workTicker.C:
 			// 1/3 before every slot, prepare and schedule shard blocks
-			slot, preGenesis := slotWithOffset(t, slotDuration/3)
+			slot, preGenesis := n.slotWithOffset(t, slotDuration/3)
 			if preGenesis {
 				continue
 			}
@@ -221,6 +230,21 @@ func (n *Eth2Node) Close() error {
 
 func (n *Eth2Node) publicDasSubset(slot Slot) map[DASSubnetIndex]struct{} {
 	return n.conf.DasPublicSubnetIndices(n.h.ID(), slot, n.conf.P)
+}
+
+func (n *Eth2Node) initialSubscriptions() error {
+	sub, err := n.shardHeaders.Subscribe()
+	if err != nil {
+		return errors.Wrap(err, "failed to subscribe to shard headers topic")
+	}
+	go n.shardHeaderHandler(sub)
+	slot, preGenesis := n.slotNow()
+	if preGenesis { // if pre-genesis, just register with the topics we'll have to be around at first
+		slot = 0
+	}
+	n.rotatePSubnets(slot)
+	n.rotateKSubnets(slot)
+	return nil
 }
 
 // joinInitialTopics does not subscribe to topics, it just makes the handles to them available for later use.

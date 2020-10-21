@@ -32,6 +32,7 @@ func das(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 		SECONDS_PER_SLOT:                      12,
 		SLOTS_PER_K_ROTATION_MAX:              32, // TODO
 		SLOTS_PER_P_ROTATION:                  320,
+		SLOT_OFFSET_PER_P_INDEX:               16,
 		EPOCHS_PER_RANDOM_SUBNET_SUBSCRIPTION: 256,
 		VALIDATOR_COUNT:                       150000, // TODO
 		NODE_COUNT:                            10000,  // TODO

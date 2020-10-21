@@ -14,14 +14,14 @@ func (n *Eth2Node) shardHeaderValidator() pubsub.ValidatorEx {
 	}
 }
 
-func (n *Eth2Node) shardHeaderHandler(index DASSubnetIndex, sub *pubsub.Subscription) {
+func (n *Eth2Node) shardHeaderHandler(sub *pubsub.Subscription) {
 	{
 		msg, err := sub.Next(n.subProcesses.ctx)
 		if err != nil {
 			if err == n.subProcesses.ctx.Err() {
 				return
 			}
-			n.log.With(zap.Error(err)).With("subnet", index).Error("failed to read from shard header subscription")
+			n.log.With(zap.Error(err)).Error("failed to read from shard header subscription")
 			sub.Cancel()
 			return
 		}
