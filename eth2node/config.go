@@ -1,10 +1,18 @@
 package eth2node
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/protolambda/zrnt/eth2/beacon"
+)
 
+// New subnet index type
 type DASSubnetIndex uint64
-type Shard uint64
-type Slot uint64
+
+// Aliases for ease of use
+type ValidatorIndex = beacon.ValidatorIndex
+type Shard = beacon.Shard
+type Slot = beacon.Slot
+type Epoch = beacon.Epoch
 
 type Config struct {
 	// Subset of indices that nodes sample, privately

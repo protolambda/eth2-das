@@ -26,6 +26,7 @@ require (
 	github.com/libp2p/go-ws-transport v0.3.1
 	github.com/multiformats/go-multiaddr v0.2.2
 	github.com/pkg/errors v0.9.1
+	github.com/protolambda/zrnt v0.12.5
 	github.com/testground/sdk-go v0.2.5
 	go.uber.org/zap v1.15.0
 )

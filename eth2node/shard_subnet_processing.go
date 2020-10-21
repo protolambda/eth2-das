@@ -26,5 +26,11 @@ func (n *Eth2Node) shardHandleSubnet(index Shard, sub *pubsub.Subscription) {
 			return
 		}
 		n.log.With("from", msg.ReceivedFrom, "length", len(msg.Data)).Debug("received message")
+
+		// TODO
+		// Each node that receives the shard block on a shard subnet,
+		// divides it into CHUNK_SIZE chunks ordered from chunk 0 to chunk MAX_BLOCK_SIZE / CHUNK_SIZE.
+		// The node then takes the chunks corresponding to the node’s node_indices and broadcasts each on its particular subnet
+
 	}
 }

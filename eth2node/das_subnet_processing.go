@@ -26,5 +26,6 @@ func (n *Eth2Node) dasHandleSubnet(index DASSubnetIndex, sub *pubsub.Subscriptio
 			return
 		}
 		n.log.With("from", msg.ReceivedFrom, "length", len(msg.Data)).Debug("received message")
+		// TODO verify that what we got is correct
 	}
 }

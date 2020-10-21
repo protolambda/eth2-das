@@ -18,6 +18,7 @@ import (
 	"go.uber.org/zap"
 	"math"
 	"net"
+	"sync"
 	"time"
 )
 
@@ -40,6 +41,10 @@ type Eth2Node struct {
 
 	// to kill main loop
 	kill chan struct{}
+
+	// Set of validator indices that runs on this node
+	localValidators map[ValidatorIndex]struct{}
+	validatorsLock  sync.RWMutex
 
 	// All SHARD_COUNT topics (joined but not necessarily subscribed)
 	shardSubnets []*pubsub.Topic
@@ -91,18 +96,36 @@ func New(ctx context.Context, conf *Config, log *zap.SugaredLogger) (*Eth2Node, 
 			ctx    context.Context
 			cancel context.CancelFunc
 		}{ctx: subCtx, cancel: subCancel},
-		h:        h,
-		ps:       ps,
-		conf:     expandedConf,
-		pIndices: make(map[DASSubnetIndex]*subnetInfo),
-		kIndices: make(map[DASSubnetIndex]*subnetInfo),
-		log:      log,
-		kill:     make(chan struct{}),
+		h:               h,
+		ps:              ps,
+		conf:            expandedConf,
+		localValidators: make(map[ValidatorIndex]struct{}),
+		pIndices:        make(map[DASSubnetIndex]*subnetInfo),
+		kIndices:        make(map[DASSubnetIndex]*subnetInfo),
+		log:             log,
+		kill:            make(chan struct{}),
 	}
 	if err := n.joinInitialTopics(); err != nil {
 		return nil, err
 	}
 	return n, nil
+}
+
+func (n *Eth2Node) RegisterValidators(indices ...ValidatorIndex) {
+	n.validatorsLock.Lock()
+	defer n.validatorsLock.Unlock()
+	for _, i := range indices {
+		n.localValidators[i] = struct{}{}
+	}
+}
+func (n *Eth2Node) ListValidators() (out []ValidatorIndex) {
+	n.validatorsLock.RLock()
+	defer n.validatorsLock.RUnlock()
+	out = make([]ValidatorIndex, len(n.localValidators))
+	for i := range n.localValidators {
+		out = append(out, i)
+	}
+	return
 }
 
 func (n *Eth2Node) Start(ip net.IP, port uint64) error {
@@ -116,7 +139,7 @@ func (n *Eth2Node) Start(ip net.IP, port uint64) error {
 	if err != nil {
 		return errors.Wrap(err, "could not construct multi addr")
 	}
-	n.log.Info("starting node!")
+	n.log.With("validators", n.ListValidators()).Info("starting node!")
 	if err := n.h.Network().Listen(mAddr); err != nil {
 		return errors.Wrap(err, "failed to bind to network interface")
 	}
@@ -142,33 +165,48 @@ func (n *Eth2Node) processLoop() {
 		return ticker
 	}
 
+	slotWithOffset := func(t time.Time, offset time.Duration) (slot Slot, preGenesis bool) {
+		sinceGenesis := t.Add(offset).Sub(genesisTime)
+		slotFloat := math.Round(sinceGenesis.Seconds() / float64(n.conf.SECONDS_PER_SLOT))
+		if slotFloat < 0 {
+			return Slot(uint64(-slotFloat)), true
+		} else {
+			return Slot(uint64(slotFloat)), false
+		}
+	}
 	// Note that slot ticker can adjust itself and drop slots, if the receiver is slow (i.e. when under heavy load)
 	slotTicker := tickerWithOffset(slotDuration, 0)
 	defer slotTicker.Stop()
 
 	// TODO schedule work publishing etc.
-	//workTicker := tickerWithOffset(slotDuration, slotDuration / 3)
+	workTicker := tickerWithOffset(slotDuration, slotDuration/3*2)
 
 	for {
 		select {
 		case _, _ = <-n.kill:
 			n.log.Info("stopping work, goodbye!")
 			return
-		case <-slotTicker.C: // schedules genesis
-			t := time.Since(genesisTime)
-			slotFloat := math.Round(t.Seconds() / float64(n.conf.SECONDS_PER_SLOT))
-			if slotFloat < 0 {
+		case t := <-slotTicker.C: // schedules genesis
+			slot, preGenesis := slotWithOffset(t, 0)
+
+			if preGenesis {
 				// waiting for genesis, countdown every slot near the end.
-				if remaining := uint64(-slotFloat); remaining%10 == 0 || remaining < 10 {
-					n.log.With("genesis_time", n.conf.GENESIS_TIME, "slots", remaining).Info("Genesis countdown...")
+				if slot%10 == 0 || slot < 10 {
+					n.log.With("genesis_time", n.conf.GENESIS_TIME, "slots", slot).Info("Genesis countdown...")
 				}
 				continue
 			}
-			slot := Slot(slotFloat)
 			n.log.With("slot", slot).Debug("slot event!")
 
 			n.rotatePSubnets(slot)
 			n.rotateKSubnets(slot)
+		case t := <-workTicker.C:
+			// 1/3 before every slot, prepare and schedule shard blocks
+			slot, preGenesis := slotWithOffset(t, slotDuration/3)
+			if preGenesis {
+				continue
+			}
+			n.scheduleShardProposalsMaybe(slot)
 		}
 	}
 }

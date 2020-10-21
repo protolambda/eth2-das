@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/pkg/errors"
 	"github.com/protolambda/eth2-das/eth2node"
+	"github.com/protolambda/zrnt/eth2/beacon"
 	"github.com/testground/sdk-go/run"
 	"github.com/testground/sdk-go/runtime"
 	"net"
@@ -39,6 +40,18 @@ func das(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to start eth2 node")
 	}
+
+	// Select a subset of validators based on global sequence number of this node.
+	// (TODO: alternatively use testground comms)
+	start := conf.VALIDATOR_COUNT * uint64(initCtx.GlobalSeq) / conf.NODE_COUNT
+	end := conf.VALIDATOR_COUNT * uint64(initCtx.GlobalSeq+1) / conf.NODE_COUNT
+	count := end - start
+	indices := make([]beacon.ValidatorIndex, count, count)
+	for i := uint64(0); i < count; i++ {
+		indices[i] = beacon.ValidatorIndex(start + i)
+	}
+	// TODO: generate interop BLS keys for validators maybe?
+	n.RegisterValidators(indices...)
 
 	if err := n.Start(net.IPv4zero, 9000); err != nil {
 		return errors.Wrap(err, "failed to start node")
