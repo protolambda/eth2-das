@@ -73,6 +73,9 @@ type Config struct {
 	// To coordinate work between all nodes
 	GENESIS_TIME uint64
 
+	// for shuffling shard committees
+	SHUFFLE_ROUND_COUNT uint8
+
 	DAS_SUBNET_TOPIC_SCORE_PARAMS    *pubsub.TopicScoreParams
 	SHARD_SUBNET_TOPIC_SCORE_PARAMS  *pubsub.TopicScoreParams
 	SHARD_HEADERS_TOPIC_SCORE_PARAMS *pubsub.TopicScoreParams

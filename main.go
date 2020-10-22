@@ -36,6 +36,7 @@ func das(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 		SLOTS_PER_P_ROTATION:                  320,
 		SLOT_OFFSET_PER_P_INDEX:               16,
 		EPOCHS_PER_RANDOM_SUBNET_SUBSCRIPTION: 256,
+		SHUFFLE_ROUND_COUNT:                   90,
 		VALIDATOR_COUNT:                       150000, // TODO
 		NODE_COUNT:                            10000,  // TODO
 		TARGET_PEERS_PER_DAS_SUB:              6,

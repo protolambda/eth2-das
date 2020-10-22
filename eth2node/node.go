@@ -66,6 +66,9 @@ type Eth2Node struct {
 	// All SHARD_COUNT topics (joined but not necessarily subscribed)
 	shardSubnets []*pubsub.Topic
 
+	// Shard subscriptions
+	shardSubs map[Shard]*pubsub.Subscription
+
 	// All CHUNK_INDEX_SUBNETS topics (joined but not necessarily subscribed)
 	dasSubnets []*pubsub.Topic
 
@@ -76,6 +79,12 @@ type Eth2Node struct {
 	pIndices map[DASSubnetIndex]*subnetInfo
 	// currently randomly joined dasSubnets
 	kIndices map[DASSubnetIndex]*subnetKInfo
+
+	// current shard committees. Shaped as shard -> committee
+	// TODO: currently these don't change, as in real-world these would be changing super slow (days)
+	// So keep things simple.
+	shard2Vals [][]ValidatorIndex
+	val2Shard  []Shard
 }
 
 func New(ctx context.Context, conf *Config, disc Discovery, log *zap.SugaredLogger) (*Eth2Node, error) {
@@ -129,6 +138,9 @@ func New(ctx context.Context, conf *Config, disc Discovery, log *zap.SugaredLogg
 		log:             log,
 		kill:            make(chan struct{}),
 	}
+
+	n.shard2Vals, n.val2Shard = n.shardCommitteeShuffling(0)
+
 	if err := n.joinInitialTopics(); err != nil {
 		return nil, err
 	}
@@ -284,6 +296,7 @@ func (n *Eth2Node) initialSubscriptions() error {
 	}
 	n.rotatePSubnets(slot)
 	n.rotateKSubnets(slot)
+	n.subscribeShardSubnets()
 	return nil
 }
 
