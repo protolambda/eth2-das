@@ -25,6 +25,7 @@ require (
 	github.com/multiformats/go-multiaddr v0.3.1
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.8.0 // indirect
+	github.com/protolambda/go-verkle v0.0.0-20201022180838-02488f01667c
 	github.com/protolambda/zrnt v0.12.5
 	github.com/testground/sdk-go v0.2.5
 	go.opencensus.io v0.22.5 // indirect
@@ -35,3 +36,5 @@ require (
 	golang.org/x/sys v0.0.0-20201020230747-6e5568b54d1a // indirect
 	google.golang.org/grpc v1.31.1 // indirect
 )
+
+replace github.com/protolambda/go-verkle => ../go-verkle

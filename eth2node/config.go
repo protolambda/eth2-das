@@ -3,17 +3,7 @@ package eth2node
 import (
 	"fmt"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	"github.com/protolambda/zrnt/eth2/beacon"
 )
-
-// New subnet index type
-type DASSubnetIndex uint64
-
-// Aliases for ease of use
-type ValidatorIndex = beacon.ValidatorIndex
-type Shard = beacon.Shard
-type Slot = beacon.Slot
-type Epoch = beacon.Epoch
 
 type Config struct {
 	// Subset of indices that nodes sample, privately
