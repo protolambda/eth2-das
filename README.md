@@ -39,6 +39,17 @@ A mock Eth2 node with the Phase 1 functionality, and instrumentation for gossip 
 - Validate Shard headers topic:
   - TODO
 
+### Custom types
+
+| Name | SSZ equivalent | Description |
+| - | - | - |
+| `DASSubnetIndex` | `uint64` | An index identifying a DAS subnet |
+| `PointIndex` | `uint64` | An index of a point, w.r.t. the extended points of a shard data blob |
+| `RawPoint` | `Vector[byte, POINT_SIZE]` | A raw point, serialized form |
+| `Point` | `uint256` | A point, `F_r` element |
+| `ChunkIndex` | `uint64` | An index of a chunk, w.r.t. the chunkified extended points of a shard data blob | 
+| `Chunk` | `Vector[Point, POINTS_PER_CHUNK]` | A sequence of points, smallest sample unit |
+
 ### Constants / configurables
 
 Don't take values as canonical. The point is to find good values.
@@ -49,11 +60,18 @@ Don't take values as canonical. The point is to find good values.
 | - | - | - | - |
 | `K` | `16` | indices | Subset of indices that nodes sample, privately  |
 | `P` | `4` | indices | Subset of indices that nodes sample, publicly |
-| `CHUNK_SIZE` | `512` | bytes | Number of bytes per chunk (index) |
+| `MAX_CHUNKS_PER_BLOCK` | `16` | chunks | Maximum number of chunks in which the extended points are split into |
+| `POINTS_PER_CHUNK` | `16` | points | Number of points per chunk |
+| `POINT_SIZE` | `31` | bytes | Number of bytes per point |
 | `MAX_BLOCK_SIZE` | `524288` | bytes | Number of bytes in a block |
 | `SHARD_HEADER_SIZE` | `256` | bytes | Number of bytes in a shard header | 
 | `SHARD_COUNT` | `64` | shards | Number of shards |
 | `SECONDS_PER_SLOT` | `12` | seconds | Number of seconds in each slot |
+
+Note that the total points per block is a power of 2 for various proof and sampling purposes.
+However the points themselves cannot efficiently be a power of 2 in byte-length.
+
+If a block is not full, the padding to the next power of 2 of points may be serialized in a more efficient way to avoid unnecessary network overhead. 
 
 | Name | Planned Value | Unit | Description |
 | - | - | - | - |
@@ -79,8 +97,8 @@ Don't take values as canonical. The point is to find good values.
 | Name | Planned Value | Unit | Description |
 | - | - | - | - |
 | `CHUNK_INDEX_SUBNETS` | `MAX_BLOCK_SIZE / CHUNK_SIZE = 1024` | subnets | Number of chunks that make up a block | 
-| `AVERAGE_VALIDATORS_PER_NODE` | `VALIDATOR_COUNT / NODE_COUNT` | validators per node | 
-
+| `AVERAGE_VALIDATORS_PER_NODE` | `VALIDATOR_COUNT / NODE_COUNT` | validators | validators per node | 
+| `MAX_DATA_SIZE` | `POINT_SIZE * POINTS_PER_CHUNK * MAX_CHUNKS_PER_BLOCK / 2` | bytes | max bytes per block data blob |
 
 ### Public DAS subnet sampling, a.k.a. `P`
 
@@ -192,6 +210,155 @@ It lists possible candidates for each subnet, based on public subnet info known 
 
 In preparation of rotation of subnets, the Eth2 node can then try to peer with peers that complement their current peers,
  to allow gossipsub to build a mesh for the topic.
+
+### Shard data and DAS chunks
+
+The shard block data is partitioned into a sequence of points for the DAS sampling process.
+The length in points is padded to a power of two, for extension and proof purporses.
+ 
+These points are then partitioned into chunks of `POINTS_PER_CHUNK` points.
+
+There are several interpretation requirements to these raw bytes:
+- Bytes as `F_r` points
+- Data extension:
+  - Requirements for FFT recovery 
+  - Points organized in even indices (more structured w.r.t. domain)
+- Does not exceed the number of points
+
+
+#### Bytes as `F_r` points
+
+The Kate commitments, proofs and data recovery all rely on the data be interpreted as `F_r` points.
+I.e. the raw data is partitioned in values that fit in a modulo `r` (BLS curve order) field.
+The modulo is just shy of spanning 256 bits, thus partitioning the bytes in 32 byte chunks will not work.
+There is an option to partition data in 254 bits to use as many bits as possible.
+For practical purposes the closest byte boundary is chosen instead, thus `POINTS_PER_CHUNK = 31 bytes`.
+
+```python
+padded_bytes = input_bytes + "\x00" * (POINT_SIZE*POINTS_PER_CHUNK - (len(input_bytes) % POINT_SIZE))
+
+def deserialize_point(p: RawPoint) -> Point:
+    return Point(uint256.from_bytes(p))
+
+def point(i: PointIndex) -> Point:
+    return deserialize_point(RawPoint(padded_bytes[i*31:(i+1)*31] + "\x00"))
+
+def chunk(chunk_index: ChunkIndex) -> Sequence[Point]:
+    # TODO: replace this with bit-reverse order, so that points are grouped more efficiently for chunk proofs
+    start = chunk_index * POINTS_PER_CHUNK
+    return [point(i) for i in range(start, start+POINTS_PER_CHUNK)]
+
+input_point_count = next_power_of_2(len(padded_bytes) // POINT_SIZE)
+extended_point_count = input_point_count * 2
+chunk_count = extended_point_count // POINTS_PER_CHUNK
+```
+
+#### Data extension
+
+The redundant extension doubles the count of the values from `N` to `2N` in such a way that any subset of `N` points will be enough to recover all of it.
+By sampling the data in an extended form, instead of just the original data, not publishing a piece of data without detection becomes intractable.
+Honest validators can trust that data has been published by making `k` random sampled queries,
+ and quickly adjust their forkchoice in case of unavailable data. 
+
+The data that is extended in such a way that it enables a
+[FFT-based recovery method](https://ethresear.ch/t/reed-solomon-erasure-code-recovery-in-n-log-2-n-time-with-ffts/3039).
+
+This method works as follows:
+
+```python
+width = 2 * N  # number of points in extended values
+root_of_unity = ... # chosen based on width
+domain = expand_root_of_unity(root_of_unity)  # generate remaining roots of unity (width total, r^0, r^1, ... r^2n), spanning the given width. Precomputed.
+modulus = 52435875175126190479447740508185965837690552500527637822603658699938581184513   # BLS curve order
+input_values = ...  #  width//2 points
+coeffs = inverse_fft(input_values, modulus, domain[::2])  # use the contained domain spanning the even values
+# The second half of the coefficients is required to be zero,
+# such that the original values are forced into the even indices, and odd indices are used for error correction.
+padded_coeffs = coeffs + [0] * N
+# Now with the full domain, derive the original inputs
+extended_values = fft(padded_coeffs, modulus, domain)
+```
+
+Any random subset of `N` points of the `extended_values` can then be recovered into the full `extended_values`.
+And then the even indices matches the original, i.e. `input_values == extended_values[::2]`
+
+Extension using two FFTs is relatively inefficient, and can be reduced to a modified FFT.
+The expected even-index values are set to the original values, and the expected right half of the input values,
+ the coefficients, is implicitly set to zeroes.
+
+This can be implemented as:
+```python
+# "a" are the even-indexed expected outputs
+# The returned list is "b", the derived odd-index outputs.
+def das_fft(a: list, modulus: int, domain: list, inverse_domain: list, inv2: int) -> list:
+    if len(a) == 2:
+        a_half0 = a[0]
+        a_half1 = a[1]
+        x = (((a_half0 + a_half1) % modulus) * inv2) % modulus
+        # y = (((a_half0 - x) % modulus) * inverse_domain[0]) % modulus     # inverse_domain[0] will always be 1
+        y = (a_half0 - x) % modulus
+
+        y_times_root = y * domain[1]
+        return [
+            (x + y_times_root) % modulus,
+            (x - y_times_root) % modulus
+        ]
+
+    if len(a) == 1:  # for illustration purposes, neat simplification. Inputs are always a power of two, dead code.
+        return a
+
+    half = len(a)  # a is already half, compared with a regular FFT
+    halfhalf = half // 2
+
+    L0 = [0] * halfhalf        # P
+    R0 = [0] * halfhalf
+    for i, (a_half0, a_half1) in enumerate(zip(a[:halfhalf], a[halfhalf:])):
+        L0[i] = (((a_half0 + a_half1) % modulus) * inv2) % modulus
+        R0[i] = (((a_half0 - L0[i]) % modulus) * inverse_domain[i * 2]) % modulus
+
+    L1 = das_fft(L0, modulus, domain[::2], inverse_domain[::2], inv2)
+    R1 = das_fft(R0, modulus, domain[::2], inverse_domain[::2], inv2)
+
+    b = [0] * half
+    for i, (x, y) in enumerate(zip(L1, R1)):    # Half the work of a regular FFT: only deal with uneven-index outputs
+        y_times_root = y * domain[1 + i * 2]
+        b[i] = (x + y_times_root) % modulus
+        b[halfhalf + i] = (x - y_times_root) % modulus
+
+    return b
+```
+
+And then the extension process can be simplified to:
+```python
+inverse_domain = [modular_inverse(d, MODULUS) for d in domain]  # Precomputed.
+odd_values = das_fft(input_values, MODULUS, domain, inverse_domain, inverse_of_2)
+extended_values = [input_values[i // 2] if i % 2 == 0 else odd_values[i // 2] for i in range(width)]
+```
+
+#### Data recovery
+
+TODO.
+
+See:
+- Original write up: https://ethresear.ch/t/reed-solomon-erasure-code-recovery-in-n-log-2-n-time-with-ffts/3039
+- Original code: https://github.com/ethereum/research/blob/master/mimc_stark/recovery.py
+- Proof of concept of recovering extended data: https://github.com/protolambda/partial_fft/blob/master/recovery_poc.py
+- Work in progress Go implementation: https://github.com/protolambda/go-verkle/
+
+### Mapping chunks to DAS subnets
+
+TODO. `hash(chunk_index, shard, slot) % subnet_count = subnet index`
+
+Randomized to spread load better. Skewed load would be limited in case of attack (manipulating chunk count), but inconvenient.
+Chunk counts are also only powers of 2, so there is little room for manipulation there.
+
+Shared subnets + high chunk count = all subnets used, empty subnets should not be a problem.
+
+
+### DAS Validator duties
+
+TODO
+
 
 ## License
 
