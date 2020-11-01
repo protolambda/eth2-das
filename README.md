@@ -259,6 +259,23 @@ It lists possible candidates for each subnet, based on public subnet info known 
 In preparation of rotation of subnets, the Eth2 node can then try to peer with peers that complement their current peers,
  to allow gossipsub to build a mesh for the topic.
 
+### DAS Topic names
+
+The topic names follow the same schema as in phase 0: `/eth2/ForkDigestValue/Name/Encoding`
+- `eth2` places it in the Eth2 namespace
+- `ForkDigestValue` is set to the hex-encoded fork digest, without `0x` prefix.
+- `Name` see table below.
+- `Encoding` the `ssz_snappy` encoding is used.
+
+| Name                             | Message Type              |
+|----------------------------------|---------------------------|
+| `shard_headers`                  | `ShardBlockHeader`        |
+| `das_vert_{vertical_index}`      | `DASSample`               |
+| `das_horz_{horizontal_index}`    | `ShardBlockData`          |
+
+TODO: depending on a shard or beacon-proposer approach, the `shard_headers` are signed or not.
+ 
+
 ### Shard data and DAS samples
 
 The shard block data is partitioned into a sequence of points for the DAS sampling process.
