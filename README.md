@@ -153,14 +153,14 @@ def das_slow_peer_seed(peer_id: PeerID) -> Bytes32:
 def das_slow_peer_slot_offset(peer_seed) -> Slot:
   return Slot(peer_seed[:8] % SLOTS_PER_SLOW_ROTATION)
 
-def das_slow_subnet_slot_offset(i: HorizontalIndex) -> Slot:
+def das_slow_subnet_slot_offset(i: VerticalIndex) -> Slot:
   return Slot(i * SLOT_OFFSET_PER_SLOW_INDEX) % SLOTS_PER_SLOW_ROTATION
 
-def das_slow_subnet_index(peer_seed: Bytes32, slot: Slot, i: uint64) -> HorizontalIndex:
+def das_slow_subnet_index(peer_seed: Bytes32, slot: Slot, i: uint64) -> VerticalIndex:
   window_index = slot // SLOTS_PER_SLOW_ROTATION
   return H(peer_seed + serialize(i) + serialize(window_index))[:8] % SAMPLE_INDEX_SUBNETS
 
-def das_slow_subnet_indices(peer_id: PeerID, slot: Slot, slow_count: int) -> Set[HorizontalIndex]:
+def das_slow_subnet_indices(peer_id: PeerID, slot: Slot, slow_count: int) -> Set[VerticalIndex]:
   peer_seed = das_slow_peer_seed(peer_id)
   peer_offset = das_slow_peer_slot_offset(peer_seed)
   return set(das_slow_subnet_index(
@@ -206,40 +206,38 @@ as it may just be an issue to subscribe to the topic fast enough.
 
 
 ```python
-class KInfo:
+class FastInfo:
     sub: Subscription
     expiry: Slot
 
-def random_subnet() -> HorizontalIndex:
-    return HorizontalIndex(random_uint64() % SAMPLE_INDEX_SUBNETS)
+def random_subnet() -> VerticalIndex:
+    return VerticalIndex(random_uint64() % SAMPLE_SUBNETS)
 
 def random_expiry(now: Slot) -> Slot:
-    return now + 1 + Slot(random_uint64() % SLOTS_PER_K_ROTATION_MAX)
+    return now + 1 + Slot(random_uint64() % SLOTS_PER_FAST_ROTATION_MAX)
 
 def das_private_subnets_update(
-    current_k: Dict[HorizontalIndex, KInfo],
-    current_p: Dict[HorizontalIndex, Subscription],
+    current_fast: Dict[VerticalIndex, FastInfo],
+    current_slow: Dict[VerticalIndex, Subscription],
     slot: Slot):
 
-    old: Dict[HorizontalIndex, Subscription] = {}
-    for subnet, info in current_k.items():
+    old: Dict[VerticalIndex, Subscription] = {}
+    for subnet, info in current_fast.items():
         if info.expiry <= slot:
             old[subnet] = info.sub
-            current_k.remove(subnet)
-    # By trial and error, backfill k
-    while len(current_k) < K:
+            current_fast.remove(subnet)
+    # Backfill FAST_INDICES
+    while len(current_fast) < FAST_INDICES:
         while True:
             subnet = random_subnet()
-            if subnet in current_k:
+            if subnet in current_fast or subnet in current_slow:  # already have it, try again (small chance)
                 continue
-            if subnet in current_p:
-                continue
-            if subnet in old:
+            if subnet in old:  # got an old subnet again
                 old.remove(subnet)
-                current_k[subnet] = KInfo(sub=old[subnet], expiry=random_expiry(slot))
-            else:
+                current_fast[subnet] = FastInfo(sub=old[subnet], expiry=random_expiry(slot))
+            else:              # new subnet
                 sub = subcribe(subnet)
-                current_k[subnet] = KInfo(sub=sub, expiry=random_expiry(slot))
+                current_fast[subnet] = FastInfo(sub=sub, expiry=random_expiry(slot))
             break
     # unsubscribe from remaining old topics
     for sub in old:
@@ -251,7 +249,7 @@ def das_private_subnets_update(
 The node uses a simple discovery interface:
 ```python
 class Discovery(Protocol):
-	def find_public(conf: Config, slot: Slot, subnets: Set[HorizontalIndex]) -> Dict[HorizontalIndex, Set[PeerID]]: ...
+	def find_public(conf: Config, slot: Slot, subnets: Set[VerticalIndex]) -> Dict[VerticalIndex, Set[PeerID]]: ...
 	def addrs(id: PeerID) -> List[Multiaddr]: ...
 
 ```
