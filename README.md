@@ -17,20 +17,20 @@ The idea is to implement a proof of concept in Go, and run it on Testground with
 A mock Eth2 node with the Phase 1 functionality, and instrumentation for gossip tests.
 
 - register topics:
-  - `CHUNK_INDEX_SUBNETS` DAS subnets
-  - `SHARD_COUNT` Shard subnets
+  - `VERTICAL_SUBNETS` DAS subnets
+  - `HORIZONTAL_SUBNETS` Distribution subnets, could be shard subnets.
   - Shard headers global topic
 - Subscribe to `P` DAS subnets randomly based on publicly known seed, unique to peer.
   - For stability
   - Find other peers via discovery (TODO add discovery)
 - Subscribe to `K` DAS subnets randomly 
   - The random sampling necessary to make DAS work secure enough
-  - Verify if all the seen chunks are correct
+  - Verify if all the seen samples are correct
     - TODO: keep track of what has been seen, *and what has not*
       - Adjust forkchoice to steer clear of unavailable shard data
 - Subscribe randomly to a shard block subnet for every Validator that runs
   - Rotate out on random `[EPOCHS_PER_RANDOM_SUBNET_SUBSCRIPTION, 2 * EPOCHS_PER_RANDOM_SUBNET_SUBSCRIPTION]` interval (per shard)
-  - For any seen block, split it up in chunks, and for each DAS subnet we are on, propagate the relevant chunks to it.
+  - For any seen block, split it up in samples, and for each DAS subnet we are on, propagate the relevant samples to it.
 - Subscribe to shard headers topic
 - Validate DAS subnets:
   - TODO
@@ -43,12 +43,13 @@ A mock Eth2 node with the Phase 1 functionality, and instrumentation for gossip 
 
 | Name | SSZ equivalent | Description |
 | - | - | - |
-| `DASSubnetIndex` | `uint64` | An index identifying a DAS subnet |
+| `VerticalIndex` | `uint64` | An index identifying a DAS subnet |
+| `HorizontalIndex` | `uint64` | An index identifying a horizontal subnet, this could be a shard subnet. |
 | `PointIndex` | `uint64` | An index of a point, w.r.t. the extended points of a shard data blob |
 | `RawPoint` | `Vector[byte, POINT_SIZE]` | A raw point, serialized form |
 | `Point` | `uint256` | A point, `F_r` element |
-| `ChunkIndex` | `uint64` | An index of a chunk, w.r.t. the chunkified extended points of a shard data blob | 
-| `Chunk` | `Vector[Point, POINTS_PER_CHUNK]` | A sequence of points, smallest sample unit |
+| `SampleIndex` | `uint64` | An index of a sample, w.r.t. the sample-ified extended points of a shard data blob | 
+| `Sample` | `Vector[Point, POINTS_PER_SAMPLE]` | A sequence of points, sample unit |
 
 ### Constants / configurables
 
@@ -58,101 +59,150 @@ Don't take values as canonical. The point is to find good values.
 
 | Name | Planned Value | Unit | Description |
 | - | - | - | - |
-| `K` | `16` | indices | Subset of indices that nodes sample, privately  |
-| `P` | `4` | indices | Subset of indices that nodes sample, publicly |
-| `MAX_CHUNKS_PER_BLOCK` | `16` | chunks | Maximum number of chunks in which the extended points are split into |
-| `POINTS_PER_CHUNK` | `16` | points | Number of points per chunk |
+| `FAST_INDICES` | `16` | indices | Subset of indices that nodes sample, privately chosen, and replaced quickly |
+| `SLOW_INDICES` | `4` | indices | Subset of indices that nodes sample, publicly determined, and replaced slowly |
+| `MAX_SAMPLES_PER_SHARD_BLOCK` | `16` | samples | Maximum number of samples in which the extended points are split into |
+| `POINTS_PER_SAMPLE` | `16` | points | Number of points per sample |
 | `POINT_SIZE` | `31` | bytes | Number of bytes per point |
-| `MAX_BLOCK_SIZE` | `524288` | bytes | Number of bytes in a block |
-| `SHARD_HEADER_SIZE` | `256` | bytes | Number of bytes in a shard header | 
-| `SHARD_COUNT` | `64` | shards | Number of shards |
-| `SECONDS_PER_SLOT` | `12` | seconds | Number of seconds in each slot |
+| `MAX_SHARD_BLOCK_SIZE` | `524288` | bytes | Number of bytes in a shard block |
+| `SHARD_HEADER_SIZE` | `256` | bytes | Number of bytes in a shard header |
+| `SLOTS_PER_FAST_ROTATION_MAX` | `32` | slots | Maximum of how frequently a fast vertical subnet subscriptions is randomly swapped. Rotations of a subnet can happen any time between 1 and `SLOTS_PER_FAST_ROTATION_MAX` (incl) slots. |
+| `SLOTS_PER_SLOW_ROTATION` | `2048` | slots | How frequently a slow vertical subnet subscriptions is randomly swapped. (deterministic on peer ID, so public and predictable) |
+| `SLOT_OFFSET_PER_SLOW_INDEX` | `512` | slots | The time for a slow vertical subscription to wait for the previous index to rotate, for stagger effect. |
+| `EPOCHS_PER_RANDOM_SUBNET_SUBSCRIPTION` | `256` | epochs | how frequently shard subnet subscriptions are kept |
+| `TARGET_PEERS_PER_DAS_SUB` | `6` | peers | How many peers should be acquired per topic. If insufficient, search for more with discovery. |
 
 Note that the total points per block is a power of 2 for various proof and sampling purposes.
 However the points themselves cannot efficiently be a power of 2 in byte-length.
 
 If a block is not full, the padding to the next power of 2 of points may be serialized in a more efficient way to avoid unnecessary network overhead. 
 
+#### Generic / testing configurables
+
+Not part of the DAS spec, but for testing purposes:
+
 | Name | Planned Value | Unit | Description |
 | - | - | - | - |
-| `SLOTS_PER_K_ROTATION_MAX` | `32` | slots | Maximum of how frequently one of the K dasSubnets are randomly swapped. Rotations of a subnet in K can happen any time between 1 and SLOTS_PER_K_ROTATION_MAX (incl) slots. |
-| `SLOTS_PER_P_ROTATION` | `320` | slots | How frequently each of the P dasSubnets are randomly swapped. (deterministic on peer ID, so public and predictable) |
-| `SLOT_OFFSET_PER_P_INDEX` | `16` | slots | SLOT_OFFSET_PER_P_INDEX is the time for an index of P to wait for the previous index to rotate. |
-| `EPOCHS_PER_RANDOM_SUBNET_SUBSCRIPTION` | `256` | epochs | how frequently shard subnet subscriptions are kept |
-| `TARGET_PEERS_PER_DAS_SUB` | `6` | peers | How many peers should be acquired per topic. If insufficient, search for more with discovery. |
 | `PEER_COUNT_LO` | `120` | peers | How many peers for low-water |
 | `PEER_COUNT_HI` | `200` | peers | How many peers to maintain for hi-water |
-
-
-#### Estimates for emulation purposes
-
-| Name | Planned Value | Unit | Description |
-| - | - | - | - |
+| `SHARD_COUNT` | `64` | shards | Number of shards |
+| `SECONDS_PER_SLOT` | `12` | seconds | Number of seconds in each slot |
 | `VALIDATOR_COUNT` | `150000` | validators | Number of active validators |
 | `NODE_COUNT` | `10000` | nodes | Physical validator nodes in the p2p network |
 
-
 #### Derived configurable value
+
+Useful aliases, derived from the other config values.
 
 | Name | Planned Value | Unit | Description |
 | - | - | - | - |
-| `CHUNK_INDEX_SUBNETS` | `MAX_BLOCK_SIZE / CHUNK_SIZE = 1024` | subnets | Number of chunks that make up a block | 
+| `SAMPLE_SUBNETS` | `MAX_SAMPLES_PER_SHARD_BLOCK * SHARD_COUNT` | subnets | Number of subnets to propagate total samples to | 
 | `AVERAGE_VALIDATORS_PER_NODE` | `VALIDATOR_COUNT / NODE_COUNT` | validators | validators per node | 
-| `MAX_DATA_SIZE` | `POINT_SIZE * POINTS_PER_CHUNK * MAX_CHUNKS_PER_BLOCK / 2` | bytes | max bytes per block data blob |
+| `MAX_DATA_SIZE` | `POINT_SIZE * POINTS_PER_SAMPLE * MAX_SAMPLES_PER_SHARD_BLOCK / 2` | bytes | max bytes per (unextended) block data blob |
 
-### Public DAS subnet sampling, a.k.a. `P`
+### Subnet sampling
 
-Public indices are sampled as:
+For sampling, all peers need to query for `k` random samples each slot. This is a lot of work, and ideally happens at a low latency.
+ 
+To achieve quick querying, the query model is changed to *push* the samples to listeners instead.
+The listeners then randomly rotate their subscriptions to keep queries unpredictable.
+Except for a small subset of subscriptions, which will function as a backbone to keep topics more stable.
+
+This shifts routing workload to the publishers, of which are there are far less at a time.
+Additionally, publishing can utilize the fan-out functionality in GossipSub, and is easier to split between nodes:
+nodes on the horizontal networks can help by producing the same samples and fan-out publishing to their own peers.  
+
+And best of all, a push model obfuscates the original source of a message: the listerners will not have to make individual queries to some identified source.
+
+The push model does not aim to serve "historical" queries (anything older than the most recent).
+
+When a sample is missing, there are a two different options: Wait, Pull
+
+#### Waiting on missing samples
+
+Wait for the sample to re-broadcast. Someone may be slow with publishing, or someone else is able to do the work.
+
+Any node can do extra work to keep the network healthy:
+- Listen on a horizontal subnet, chunkify the block data in samples, and propagate the samples to vertical subnets.
+- Listen on enough vertical subnets, reconstruct the missing samples by recovery, and propagate the recovered samples.
+
+This is not a requirement, but can improve the network stability with little resources, and without any central party.
+
+#### Pulling missing samples
+
+The more realistic option, to execute when a sample is missing, is to query any node that is known to hold it.
+Since *consensus identity is disconnected from network identity*, there is no direct way to contact custody holders 
+without explicitly asking for the data.
+
+However, *network identities* are still used to build a backbone for each vertical subnet.
+These nodes should have received the samples, and can serve a buffer of them on demand.
+Although serving these is not directly incentivised, it is little work:
+1. Buffer any message you see on the `SLOW_INDICES` vertical subnets, for a buffer of approximately two weeks.
+2. Serve the samples on request. An individual sample is just `~ 0.5 KB`, and does not require any pre-processing to serve.
+
+Pulling samples directly from nodes with a custody responsibility, without revealing their identity to the network, is an open problem. 
+
+
+#### Public/slow DAS subnet sampling
+
+The slow indices are sampled as:
 ```python
-def das_public_peer_seed(peer_id: PeerID) -> Bytes32:
-  return H(PUBLIC_DAS_SUBNETS_DOMAIN ++ peer_id)
+def das_slow_peer_seed(peer_id: PeerID) -> Bytes32:
+  return H(SLOW_DAS_SUBNETS_DOMAIN + peer_id)  # concat bytes
 
-def das_public_peer_slot_offset(peer_seed) -> Slot:
-  return Slot(peer_seed[:8] % SLOTS_PER_P_ROTATION)
+def das_slow_peer_slot_offset(peer_seed) -> Slot:
+  return Slot(peer_seed[:8] % SLOTS_PER_SLOW_ROTATION)
 
-def das_public_subnet_slot_offset(i: DASSubnetIndex) -> Slot:
-  return Slot(i * SLOT_OFFSET_PER_P_INDEX) % SLOTS_PER_P_ROTATION
+def das_slow_subnet_slot_offset(i: HorizontalIndex) -> Slot:
+  return Slot(i * SLOT_OFFSET_PER_SLOW_INDEX) % SLOTS_PER_SLOW_ROTATION
 
-def das_public_subnet_index(peer_seed: Bytes32, slot: Slot, i: uint64) -> DASSubnetIndex:
-  window_index = slot ~/ SLOTS_PER_P_ROTATION
-  return H(peer_seed ++ i ++ window_index)[:8] % CHUNK_INDEX_SUBNETS
+def das_slow_subnet_index(peer_seed: Bytes32, slot: Slot, i: uint64) -> HorizontalIndex:
+  window_index = slot // SLOTS_PER_SLOW_ROTATION
+  return H(peer_seed + serialize(i) + serialize(window_index))[:8] % SAMPLE_INDEX_SUBNETS
 
-def das_public_subnet_indices(peer_id: PeerID, slot: Slot, das_p: uint64) -> Set[DASSubnetIndex]:
-  peer_seed = das_public_peer_seed(peer_id)
-  peer_offset = das_public_peer_slot_offset(peer_seed)
-  return set(
- 		das_public_subnet_index(
+def das_slow_subnet_indices(peer_id: PeerID, slot: Slot, slow_count: int) -> Set[HorizontalIndex]:
+  peer_seed = das_slow_peer_seed(peer_id)
+  peer_offset = das_slow_peer_slot_offset(peer_seed)
+  return set(das_slow_subnet_index(
 				peer_seed,
-				slot + peer_offset + das_public_subnet_slot_offset(i),
+				slot + peer_offset + das_slow_subnet_slot_offset(i),
 				i,
-			) for i in range(das_p))
+			) for i in range(slow_count))
 
-p_indices = das_public_subnet_indices(peer_id, slot, P)
+slow_indices = das_slow_subnet_indices(peer_id, slot, SLOW_INDICES)
 ```
 
-Any overlap in `p_indices` is rare, and acceptable. The set will be a little smaller sometimes.
+Any overlap in `slow_indices` is rare, and acceptable. The set will be a little smaller sometimes.
 
-The idea of making `P` slow, public and predictable is:
+The idea of making it slow, public and predictable is:
 - As backbone, for subnet stability
 - Easy to discover peers through
 - By using a seed based on peer ID, no data has to be tracked on discovery. No blow up in ENR size.
 - Predictable enough to prepare subnet peering in advance
 - Small value, other sampling can be unpredictable and rotate quicker.
 
-### Private DAS subnet sampling, a.k.a. `K`
+Predictability here also avoids the need for:
+- Additional information in ENR (e.g. list of indices). Just run the above functions on any peer ID.
+- Complicated discovery. Just iterate the known peer IDs.
 
-For the random sampling, `K` subnets are joined randomly,
-selected out of the total `CHUNK_INDEX_SUBNETS`, except for what is already joined publicly (`P`).
+And offsets are used per peer and per subnet index, to avoid sudden synchronous changes in subscriptions across the network.
 
-Then on random intervals, each of the `K` subnet subscriptions is swapped for another subnet.
+#### Private/quick DAS subnet sampling
+
+For the random sampling, `FAST_INDICES` indices should be queried randomly.
+selected out of the total `SAMPLE_INDEX_SUBNETS`, except for what is already joined publicly (`SLOW_INDICES`).
+
+Then on random intervals, the `FAST_INDICES` subnet subscriptions are swapped for other subnets.
 
 This effectively creates a PUSH model where validators 
 register themselves on short notice to be sampling a random subset.
-The shard blocks are split up in chunks, and should reach the validators with relatively low latency.
 
-**Note: depending on test results, a larger K may be set, but for any topics that are subscribed to in e.g. 
-the last few slots won't count as heavy towards bad data availability,
-as it may just be an issue to subscribe to the topic fast enough.**
+The shard blocks are split up in samples, and should reach the validators with relatively low latency.
+
+**Note**: depending on test results, a larger `FAST_INDICES` may be set.
+The effect of quickly changing subscriptions is being researched.
+Any topics that are subscribed to in e.g. the last few slots should not count as heavy towards bad data availability,
+as it may just be an issue to subscribe to the topic fast enough.
 
 
 ```python
@@ -160,18 +210,18 @@ class KInfo:
     sub: Subscription
     expiry: Slot
 
-def random_subnet() -> DASSubnetIndex:
-    return DASSubnetIndex(random_uint64() % CHUNK_INDEX_SUBNETS)
+def random_subnet() -> HorizontalIndex:
+    return HorizontalIndex(random_uint64() % SAMPLE_INDEX_SUBNETS)
 
 def random_expiry(now: Slot) -> Slot:
     return now + 1 + Slot(random_uint64() % SLOTS_PER_K_ROTATION_MAX)
 
 def das_private_subnets_update(
-    current_k: Dict[DASSubnetIndex, KInfo],
-    current_p: Dict[DASSubnetIndex, Subscription],
+    current_k: Dict[HorizontalIndex, KInfo],
+    current_p: Dict[HorizontalIndex, Subscription],
     slot: Slot):
 
-    old: Dict[DASSubnetIndex, Subscription] = {}
+    old: Dict[HorizontalIndex, Subscription] = {}
     for subnet, info in current_k.items():
         if info.expiry <= slot:
             old[subnet] = info.sub
@@ -201,7 +251,7 @@ def das_private_subnets_update(
 The node uses a simple discovery interface:
 ```python
 class Discovery(Protocol):
-	def find_public(conf: Config, slot: Slot, subnets: Set[DASSubnetIndex]) -> Dict[DASSubnetIndex, Set[PeerID]]: ...
+	def find_public(conf: Config, slot: Slot, subnets: Set[HorizontalIndex]) -> Dict[HorizontalIndex, Set[PeerID]]: ...
 	def addrs(id: PeerID) -> List[Multiaddr]: ...
 
 ```
@@ -211,12 +261,12 @@ It lists possible candidates for each subnet, based on public subnet info known 
 In preparation of rotation of subnets, the Eth2 node can then try to peer with peers that complement their current peers,
  to allow gossipsub to build a mesh for the topic.
 
-### Shard data and DAS chunks
+### Shard data and DAS samples
 
 The shard block data is partitioned into a sequence of points for the DAS sampling process.
 The length in points is padded to a power of two, for extension and proof purporses.
  
-These points are then partitioned into chunks of `POINTS_PER_CHUNK` points.
+These points are then partitioned into samples of `POINTS_PER_SAMPLE` points.
 
 There are several interpretation requirements to these raw bytes:
 - Bytes as `F_r` points
@@ -230,12 +280,12 @@ There are several interpretation requirements to these raw bytes:
 
 The Kate commitments, proofs and data recovery all rely on the data be interpreted as `F_r` points.
 I.e. the raw data is partitioned in values that fit in a modulo `r` (BLS curve order) field.
-The modulo is just shy of spanning 256 bits, thus partitioning the bytes in 32 byte chunks will not work.
+The modulo is just shy of spanning 256 bits, thus partitioning the bytes in 32 byte samples will not work.
 There is an option to partition data in 254 bits to use as many bits as possible.
-For practical purposes the closest byte boundary is chosen instead, thus `POINTS_PER_CHUNK = 31 bytes`.
+For practical purposes the closest byte boundary is chosen instead, thus `POINTS_PER_SAMPLE = 31 bytes`.
 
 ```python
-padded_bytes = input_bytes + "\x00" * (POINT_SIZE*POINTS_PER_CHUNK - (len(input_bytes) % POINT_SIZE))
+padded_bytes = input_bytes + "\x00" * (POINT_SIZE*POINTS_PER_SAMPLE - (len(input_bytes) % POINT_SIZE))
 
 def deserialize_point(p: RawPoint) -> Point:
     return Point(uint256.from_bytes(p))
@@ -243,14 +293,14 @@ def deserialize_point(p: RawPoint) -> Point:
 def point(i: PointIndex) -> Point:
     return deserialize_point(RawPoint(padded_bytes[i*31:(i+1)*31] + "\x00"))
 
-def chunk(chunk_index: ChunkIndex) -> Sequence[Point]:
-    # TODO: replace this with bit-reverse order, so that points are grouped more efficiently for chunk proofs
-    start = chunk_index * POINTS_PER_CHUNK
-    return [point(i) for i in range(start, start+POINTS_PER_CHUNK)]
+def sample(sample_index: SampleIndex) -> Sequence[Point]:
+    # TODO: replace this with bit-reverse order, so that points are grouped more efficiently for sample proofs
+    start = sample_index * POINTS_PER_SAMPLE
+    return [point(i) for i in range(start, start+POINTS_PER_SAMPLE)]
 
 input_point_count = next_power_of_2(len(padded_bytes) // POINT_SIZE)
 extended_point_count = input_point_count * 2
-chunk_count = extended_point_count // POINTS_PER_CHUNK
+sample_count = extended_point_count // POINTS_PER_SAMPLE
 ```
 
 #### Data extension
@@ -345,14 +395,14 @@ See:
 - Proof of concept of recovering extended data: https://github.com/protolambda/partial_fft/blob/master/recovery_poc.py
 - Work in progress Go implementation: https://github.com/protolambda/go-verkle/
 
-### Mapping chunks to DAS subnets
+### Mapping samples to DAS subnets
 
-TODO. `hash(chunk_index, shard, slot) % subnet_count = subnet index`
+TODO. `hash(sample_index, shard, slot) % subnet_count = subnet index`
 
-Randomized to spread load better. Skewed load would be limited in case of attack (manipulating chunk count), but inconvenient.
-Chunk counts are also only powers of 2, so there is little room for manipulation there.
+Randomized to spread load better. Skewed load would be limited in case of attack (manipulating sample count), but inconvenient.
+Sample counts are also only powers of 2, so there is little room for manipulation there.
 
-Shared subnets + high chunk count = all subnets used, empty subnets should not be a problem.
+Shared subnets + high sample count = all subnets used, empty subnets should not be a problem.
 
 
 ### DAS Validator duties
