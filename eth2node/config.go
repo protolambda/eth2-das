@@ -21,9 +21,6 @@ type Config struct {
 	// Number of points per sample
 	POINTS_PER_SAMPLE uint64
 
-	// Number of bytes in a shard block
-	MAX_SHARD_BLOCK_SIZE uint64
-
 	// Maximum of how frequently a fast vertical subnet subscriptions is randomly swapped.
 	// Rotations of a subnet can happen any time between 1 and SLOTS_PER_FAST_ROTATION_MAX (incl) slots.
 	SLOTS_PER_FAST_ROTATION_MAX uint64

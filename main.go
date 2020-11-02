@@ -25,25 +25,26 @@ func das(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 	ctx := context.Background()
 	// TODO parameters
 	conf := &eth2node.Config{
-		FAST_INDICES:                          16,
-		SLOW_INDICES:                          4,
-		CHUNK_SIZE:                            512,
-		MAX_BLOCK_SIZE:                        524288,
-		SHARD_HEADER_SIZE:                     256,
-		SHARD_COUNT:                           64,
-		SECONDS_PER_SLOT:                      12,
-		SLOTS_PER_K_ROTATION_MAX:              32, // TODO
-		SLOTS_PER_P_ROTATION:                  320,
-		SLOT_OFFSET_PER_P_INDEX:               16,
-		SHUFFLE_ROUND_COUNT:                   90,
-		VALIDATOR_COUNT:                       150000, // TODO
-		NODE_COUNT:                            10000,  // TODO
-		TARGET_PEERS_PER_DAS_SUB:              6,
-		PEER_COUNT_LO:                         (16 + 4) * 6, // TODO: educated guess
-		PEER_COUNT_HI:                         200,
-		// TODO: using no scoring / defaults now, can change this later.
-		DAS_SUBNET_TOPIC_SCORE_PARAMS:    nil,
-		SHARD_SUBNET_TOPIC_SCORE_PARAMS:  nil,
+		FAST_INDICES:                     16,
+		SLOW_INDICES:                     4,
+		MAX_SAMPLES_PER_SHARD_BLOCK:      16,
+		POINTS_PER_SAMPLE:                16,
+		SLOTS_PER_FAST_ROTATION_MAX:      32,
+		SLOTS_PER_SLOW_ROTATION:          2048,
+		SLOT_OFFSET_PER_SLOW_INDEX:       512,
+		SHARD_COUNT:                      64,
+		SECONDS_PER_SLOT:                 12,
+		VALIDATOR_COUNT:                  150000,
+		NODE_COUNT:                       10000,
+		ForkDigest:                       [4]byte{0xaa, 0xbb, 0xcc, 0xdd},
+		TARGET_PEERS_PER_DAS_SUB:         6,
+		PEER_COUNT_LO:                    120,
+		PEER_COUNT_HI:                    200,
+		GENESIS_TIME:                     uint64(time.Now().Unix()), // TODO
+		SHUFFLE_ROUND_COUNT:              90,
+		// TODO gossipsub score tuning (ignored for now)
+		VERT_SUBNET_TOPIC_SCORE_PARAMS:   nil,
+		HORZ_SUBNET_TOPIC_SCORE_PARAMS:   nil,
 		SHARD_HEADERS_TOPIC_SCORE_PARAMS: nil,
 		GOSSIP_GLOBAL_SCORE_PARAMS:       nil,
 		GOSSIP_GLOBAL_SCORE_THRESHOLDS:   nil,

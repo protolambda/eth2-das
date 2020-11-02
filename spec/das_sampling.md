@@ -33,7 +33,6 @@ Don't take values as canonical. The point is to find good values during DAS prot
 | `SLOW_INDICES` | `4` | indices | Subset of indices that nodes sample, publicly determined, and replaced slowly |
 | `MAX_SAMPLES_PER_SHARD_BLOCK` | `16` | samples | Maximum number of samples in which the extended points are split into |
 | `POINTS_PER_SAMPLE` | `16` | points | Number of points per sample |
-| `MAX_SHARD_BLOCK_SIZE` | `524288` | bytes | Number of bytes in a shard block |
 | `SLOTS_PER_FAST_ROTATION_MAX` | `32` | slots | Maximum of how frequently a fast vertical subnet subscriptions is randomly swapped. Rotations of a subnet can happen any time between 1 and `SLOTS_PER_FAST_ROTATION_MAX` (incl) slots. |
 | `SLOTS_PER_SLOW_ROTATION` | `2048` | slots | How frequently a slow vertical subnet subscriptions is randomly swapped. (deterministic on peer ID, so public and predictable) |
 | `SLOT_OFFSET_PER_SLOW_INDEX` | `512` | slots | The time for a slow vertical subscription to wait for the previous index to rotate, for stagger effect. |
