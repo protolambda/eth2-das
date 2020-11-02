@@ -6,17 +6,17 @@ import (
 	"go.uber.org/zap"
 )
 
-// rotatePSubnets rotates the subscriptions for topics we are on, called by the main loop every slot.
+// rotateSlowVertSubnets rotates the subscriptions for topics we are on, called by the main loop every slot.
 // It can handle skipped slots, and will robustly match slot expectations
-func (n *Eth2Node) rotatePSubnets(slot Slot) {
+func (n *Eth2Node) rotateSlowVertSubnets(slot Slot) {
 	newSubnets := n.publicDasSubset(slot)
 	futureSubnets := n.publicDasSubset(slot + 32)
 
 	// cancel subscriptions of topics we left.
-	for subnet, info := range n.pIndices {
+	for subnet, info := range n.slowIndices {
 		if _, ok := newSubnets[subnet]; !ok {
 			// Optimization:
-			// check pIndices of slot + 32, and see if we need so sub to the topic again.
+			// check slowIndices of slot + 32, and see if we need so sub to the topic again.
 			// If so, then don't cancel, avoid a quick leave/graft
 			if _, ok := futureSubnets[subnet]; ok {
 				continue
@@ -32,46 +32,46 @@ func (n *Eth2Node) rotatePSubnets(slot Slot) {
 	// get subscriptions for topics we joined.
 	for subnet := range newSubnets {
 		// not everything rotates all the time
-		if _, ok := n.pIndices[subnet]; ok {
+		if _, ok := n.slowIndices[subnet]; ok {
 			continue
 		}
 		// sometimes we are already subscribed to it privately. Move it over then.
-		if v, ok := n.kIndices[subnet]; ok {
+		if v, ok := n.fastIndices[subnet]; ok {
 			// Remove from FAST_INDICES subset, add to SLOW_INDICES subset
-			delete(n.kIndices, subnet)
+			delete(n.fastIndices, subnet)
 			// just get the regular subnet info, strip out the rotation that was part of the FAST_INDICES subnets logic.
-			n.pIndices[subnet] = &v.subnetInfo
+			n.slowIndices[subnet] = &v.subnetInfo
 			continue
 		}
 		// and sometimes we really do have to open a new subscription
-		t := n.dasSubnets[subnet]
+		t := n.verticalSubnets[subnet]
 		sub, err := t.Subscribe()
 		if err != nil {
 			n.log.With(zap.Error(err)).Error("failed to subscribe to das subnet as part of public duties")
 		} else {
-			n.pIndices[subnet] = &subnetInfo{
+			n.slowIndices[subnet] = &subnetInfo{
 				subscribedAt: slot,
 				sub:          sub,
 			}
-			go n.dasHandleSubnet(subnet, sub)
+			go n.vertHandleSubnet(subnet, sub)
 		}
 	}
 }
 
-// rotateKSubnets, like rotatePSubnets, rotates subnets and does so robustly.
+// rotateFastVertSubnets, like rotateSlowVertSubnets, rotates subnets and does so robustly.
 // But instead of deterministically and publicly predictable subscribing, it is based on private local randomness.
 // Subscriptions in FAST_INDICES won't overlap with those in SLOW_INDICES, to avoid double work.
-func (n *Eth2Node) rotateKSubnets(slot Slot) {
+func (n *Eth2Node) rotateFastVertSubnets(slot Slot) {
 	// Swap things as scheduled, with something that is not already in our public subnet indices
 
 	// collect everything that is getting rotated out
-	old := make(map[DASSubnetIndex]*subnetInfo)
+	old := make(map[VerticalIndex]*subnetInfo)
 	// rotate out the expired
-	for subnet, info := range n.kIndices {
+	for subnet, info := range n.fastIndices {
 		// time to unsubscribe here yet?
 		if info.expiry <= slot {
 			old[subnet] = &info.subnetInfo
-			delete(n.kIndices, subnet)
+			delete(n.fastIndices, subnet)
 		}
 	}
 	// now fill back up to FAST_INDICES with random subnets
@@ -83,24 +83,24 @@ func (n *Eth2Node) rotateKSubnets(slot Slot) {
 		return binary.LittleEndian.Uint64(indexBuf[:])
 	}
 
-	randomSubnet := func() DASSubnetIndex {
-		return DASSubnetIndex(randomUint64() % n.conf.CHUNK_INDEX_SUBNETS)
+	randomSubnet := func() VerticalIndex {
+		return VerticalIndex(randomUint64() % n.conf.SAMPLE_SUBNETS)
 	}
 
 	randomExpiry := func() Slot {
-		return slot + 1 + Slot(randomUint64()%n.conf.SLOTS_PER_K_ROTATION_MAX)
+		return slot + 1 + Slot(randomUint64()%n.conf.SLOTS_PER_FAST_ROTATION_MAX)
 	}
 
-	for i := uint64(len(n.kIndices)); i < n.conf.FAST_INDICES; i++ {
+	for i := uint64(len(n.fastIndices)); i < n.conf.FAST_INDICES; i++ {
 		for { // try random subnets until we find one that works
 			// (given a small FAST_INDICES and SLOW_INDICES, and large CHUNK_INDEX_SUBNETS, trial-and-error should be fast)
 			subnet := randomSubnet()
 			// must not be part of SLOW_INDICES already
-			if _, ok := n.pIndices[subnet]; ok {
+			if _, ok := n.slowIndices[subnet]; ok {
 				continue
 			}
 			// must not be part of FAST_INDICES already
-			if _, ok := n.kIndices[subnet]; ok {
+			if _, ok := n.fastIndices[subnet]; ok {
 				continue
 			}
 			// if we were subscribed to it previously, then fine, we'll stay on it.
@@ -108,25 +108,25 @@ func (n *Eth2Node) rotateKSubnets(slot Slot) {
 				delete(old, subnet)
 
 				n.log.With("subnet", subnet, "slot", slot).Debug("re-subscribing to FAST_INDICES subnet")
-				n.kIndices[subnet] = &subnetKInfo{
+				n.fastIndices[subnet] = &subnetFastInfo{
 					subnetInfo: *v,             // same old subnet
 					expiry:     randomExpiry(), // new expiry time
 				}
 			} else {
 				n.log.With("subnet", subnet, "slot", slot).Debug("subscribing to new FAST_INDICES subnet")
-				t := n.dasSubnets[subnet]
+				t := n.verticalSubnets[subnet]
 				sub, err := t.Subscribe() // the new subnet!
 				if err != nil {
 					n.log.With(zap.Error(err)).Error("failed to subscribe to das subnet as part of private duties")
 				} else {
-					n.kIndices[subnet] = &subnetKInfo{
+					n.fastIndices[subnet] = &subnetFastInfo{
 						subnetInfo: subnetInfo{
 							subscribedAt: slot,
 							sub:          sub,
 						},
 						expiry: randomExpiry(), // new expiry time
 					}
-					go n.dasHandleSubnet(subnet, sub)
+					go n.vertHandleSubnet(subnet, sub)
 				}
 			}
 			break

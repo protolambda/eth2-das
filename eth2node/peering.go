@@ -6,14 +6,14 @@ import (
 
 func (n *Eth2Node) peersUpdate(slot Slot) {
 	// determine set of subnets we are on
-	subnets := make(map[DASSubnetIndex]struct{}, n.conf.SLOW_INDICES+n.conf.FAST_INDICES)
-	for subnet := range n.pIndices {
+	subnets := make(map[VerticalIndex]struct{}, n.conf.SLOW_INDICES+n.conf.FAST_INDICES)
+	for subnet := range n.slowIndices {
 		subnets[subnet] = struct{}{}
 	}
-	for subnet := range n.kIndices {
+	for subnet := range n.fastIndices {
 		subnets[subnet] = struct{}{}
 	}
-	want := make(map[DASSubnetIndex]struct{})
+	want := make(map[VerticalIndex]struct{})
 	// Now check our peers on each of these topics
 	for subnet := range subnets {
 		topicPeers := n.ps.ListPeers(n.conf.VertTopic(subnet))

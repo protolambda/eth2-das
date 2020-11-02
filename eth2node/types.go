@@ -2,8 +2,7 @@ package eth2node
 
 import "github.com/protolambda/zrnt/eth2/beacon"
 
-// New subnet index type
-type DASSubnetIndex uint64
+type VerticalIndex uint64
 
 // Aliases for ease of use
 type ValidatorIndex = beacon.ValidatorIndex
@@ -46,12 +45,12 @@ type ShardBlockData []byte
 type ShardBlockDataChunk []byte
 
 type DASMessage struct {
-	Slot Slot
+	Slot  Slot
 	Chunk ShardBlockDataChunk
-	Index DASSubnetIndex
+	Index VerticalIndex
 
 	// TODO: does this need a ref to the shard block root, so it can be matched with the header easily?
 
 	// Proof to show that the chunk is part of the vector commitment in the header. (correct?)
-	KateProof [32]byte
+	KateProof [48]byte
 }

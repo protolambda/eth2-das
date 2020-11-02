@@ -7,14 +7,36 @@ import (
 	"go.uber.org/zap"
 )
 
-func (n *Eth2Node) shardSubnetValidator(index Shard) pubsub.ValidatorEx {
+func (n *Eth2Node) subscribeHorzSubnets() {
+	// no changing of committees implemented in prototype.
+	// Just used current committee shuffling in node state
+
+	// Find all shards the node is participating in
+	shards := make(map[Shard]struct{})
+	for val := range n.localValidators {
+		shard := n.val2Shard[val]
+		shards[shard] = struct{}{}
+	}
+	n.log.With("validating_shards", shards).Info("validating on shards")
+	for shard := range shards {
+		topic := n.horizontalSubnets[shard]
+		sub, err := topic.Subscribe()
+		if err != nil {
+			n.log.With(zap.Error(err)).Error("failed to subscribe to shard")
+		}
+		n.horizontalSubs[shard] = sub
+		go n.horzHandleSubnet(Shard(shard), sub)
+	}
+}
+
+func (n *Eth2Node) horzSubnetValidator(index Shard) pubsub.ValidatorEx {
 	return func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
 		// TODO subnet validation
 		return pubsub.ValidationAccept
 	}
 }
 
-func (n *Eth2Node) shardHandleSubnet(index Shard, sub *pubsub.Subscription) {
+func (n *Eth2Node) horzHandleSubnet(index Shard, sub *pubsub.Subscription) {
 	{
 		msg, err := sub.Next(n.subProcesses.ctx)
 		if err != nil {

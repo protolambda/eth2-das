@@ -34,7 +34,7 @@ type subnetInfo struct {
 	sub          *pubsub.Subscription
 }
 
-type subnetKInfo struct {
+type subnetFastInfo struct {
 	subnetInfo
 	// when the subnet subscription should be rotated for something else
 	expiry Slot
@@ -64,21 +64,21 @@ type Eth2Node struct {
 	validatorsLock  sync.RWMutex
 
 	// All SHARD_COUNT topics (joined but not necessarily subscribed)
-	shardSubnets []*pubsub.Topic
+	horizontalSubnets []*pubsub.Topic
 
 	// Shard subscriptions
-	shardSubs map[Shard]*pubsub.Subscription
+	horizontalSubs map[Shard]*pubsub.Subscription
 
-	// All CHUNK_INDEX_SUBNETS topics (joined but not necessarily subscribed)
-	dasSubnets []*pubsub.Topic
+	// All SAMPLE_SUBNETS topics (joined but not necessarily subscribed)
+	verticalSubnets []*pubsub.Topic
 
 	// A singular topic used to message shard headers on.
 	shardHeaders *pubsub.Topic
 
-	// currently publicly joined dasSubnets
-	pIndices map[DASSubnetIndex]*subnetInfo
-	// currently randomly joined dasSubnets
-	kIndices map[DASSubnetIndex]*subnetKInfo
+	// currently publicly joined verticalSubnets, slowly rotates
+	slowIndices map[VerticalIndex]*subnetInfo
+	// currently randomly joined verticalSubnets, quickly rotates
+	fastIndices map[VerticalIndex]*subnetFastInfo
 
 	// current shard committees. Shaped as shard -> committee
 	// TODO: currently these don't change, as in real-world these would be changing super slow (days)
@@ -133,8 +133,8 @@ func New(ctx context.Context, conf *Config, disc Discovery, log *zap.SugaredLogg
 		conf:            expandedConf,
 		dialReq:         make(chan peer.ID, 30), // don't try to schedule too many dials at a time.
 		localValidators: make(map[ValidatorIndex]struct{}),
-		pIndices:        make(map[DASSubnetIndex]*subnetInfo),
-		kIndices:        make(map[DASSubnetIndex]*subnetKInfo),
+		slowIndices:     make(map[VerticalIndex]*subnetInfo),
+		fastIndices:     make(map[VerticalIndex]*subnetFastInfo),
 		log:             log,
 		kill:            make(chan struct{}),
 	}
@@ -245,8 +245,8 @@ func (n *Eth2Node) processLoop() {
 			}
 			n.log.With("slot", slot).Debug("slot event!")
 
-			n.rotatePSubnets(slot)
-			n.rotateKSubnets(slot)
+			n.rotateSlowVertSubnets(slot)
+			n.rotateFastVertSubnets(slot)
 			n.peersUpdate(slot)
 		case t := <-workTicker.C:
 			// 1/3 before every slot, prepare and schedule shard blocks
@@ -280,8 +280,8 @@ func (n *Eth2Node) Close() error {
 	return n.h.Close()
 }
 
-func (n *Eth2Node) publicDasSubset(slot Slot) map[DASSubnetIndex]struct{} {
-	return n.conf.DasPublicSubnetIndices(n.h.ID(), slot, n.conf.SLOW_INDICES)
+func (n *Eth2Node) publicDasSubset(slot Slot) map[VerticalIndex]struct{} {
+	return n.conf.DasSlowSubnetIndices(n.h.ID(), slot, n.conf.SLOW_INDICES)
 }
 
 func (n *Eth2Node) initialSubscriptions() error {
@@ -294,9 +294,9 @@ func (n *Eth2Node) initialSubscriptions() error {
 	if preGenesis { // if pre-genesis, just register with the topics we'll have to be around at first
 		slot = 0
 	}
-	n.rotatePSubnets(slot)
-	n.rotateKSubnets(slot)
-	n.subscribeShardSubnets()
+	n.rotateSlowVertSubnets(slot)
+	n.rotateFastVertSubnets(slot)
+	n.subscribeHorzSubnets()
 	return nil
 }
 
@@ -304,10 +304,10 @@ func (n *Eth2Node) initialSubscriptions() error {
 func (n *Eth2Node) joinInitialTopics() error {
 
 	// init DAS subnets
-	n.dasSubnets = make([]*pubsub.Topic, 0, n.conf.CHUNK_INDEX_SUBNETS)
-	for i := DASSubnetIndex(0); i < DASSubnetIndex(n.conf.CHUNK_INDEX_SUBNETS); i++ {
+	n.verticalSubnets = make([]*pubsub.Topic, 0, n.conf.SAMPLE_SUBNETS)
+	for i := VerticalIndex(0); i < VerticalIndex(n.conf.SAMPLE_SUBNETS); i++ {
 		name := n.conf.VertTopic(i)
-		if err := n.ps.RegisterTopicValidator(name, n.dasSubnetValidator(i)); err != nil {
+		if err := n.ps.RegisterTopicValidator(name, n.vertSubnetValidator(i)); err != nil {
 			return fmt.Errorf("failed to create validator for das subnet topic %d: %w", i, err)
 		}
 		t, err := n.ps.Join(name)
@@ -315,19 +315,19 @@ func (n *Eth2Node) joinInitialTopics() error {
 			return fmt.Errorf("failed to prepare das subnet topic %d: %w", i, err)
 		}
 		go n.handleTopicEvents(name, t)
-		if n.conf.DAS_SUBNET_TOPIC_SCORE_PARAMS != nil {
-			if err := t.SetScoreParams(n.conf.DAS_SUBNET_TOPIC_SCORE_PARAMS); err != nil {
-				return errors.Wrap(err, "bad DAS subnet score params")
+		if n.conf.VERT_SUBNET_TOPIC_SCORE_PARAMS != nil {
+			if err := t.SetScoreParams(n.conf.VERT_SUBNET_TOPIC_SCORE_PARAMS); err != nil {
+				return errors.Wrap(err, "bad vertical subnet score params")
 			}
 		}
-		n.dasSubnets = append(n.dasSubnets, t)
+		n.verticalSubnets = append(n.verticalSubnets, t)
 	}
 
 	// init shard subnets
-	n.shardSubnets = make([]*pubsub.Topic, 0, n.conf.SHARD_COUNT)
+	n.horizontalSubnets = make([]*pubsub.Topic, 0, n.conf.SHARD_COUNT)
 	for i := Shard(0); i < Shard(n.conf.SHARD_COUNT); i++ {
-		name := n.conf.ShardTopic(i)
-		if err := n.ps.RegisterTopicValidator(name, n.shardSubnetValidator(i)); err != nil {
+		name := n.conf.HorzTopic(i)
+		if err := n.ps.RegisterTopicValidator(name, n.horzSubnetValidator(i)); err != nil {
 			return fmt.Errorf("failed to create validator for shard subnet topic %d: %w", i, err)
 		}
 		t, err := n.ps.Join(name)
@@ -335,12 +335,12 @@ func (n *Eth2Node) joinInitialTopics() error {
 			return fmt.Errorf("failed to prepare shard subnet topic %d: %w", i, err)
 		}
 		go n.handleTopicEvents(name, t)
-		if n.conf.SHARD_SUBNET_TOPIC_SCORE_PARAMS != nil {
-			if err := t.SetScoreParams(n.conf.SHARD_SUBNET_TOPIC_SCORE_PARAMS); err != nil {
-				return errors.Wrap(err, "bad shard subnet score params")
+		if n.conf.HORZ_SUBNET_TOPIC_SCORE_PARAMS != nil {
+			if err := t.SetScoreParams(n.conf.HORZ_SUBNET_TOPIC_SCORE_PARAMS); err != nil {
+				return errors.Wrap(err, "bad horizontal subnet score params")
 			}
 		}
-		n.shardSubnets = append(n.shardSubnets, t)
+		n.horizontalSubnets = append(n.horizontalSubnets, t)
 	}
 
 	// init shard headers topic

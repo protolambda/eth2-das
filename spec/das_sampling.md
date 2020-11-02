@@ -18,7 +18,6 @@ TODO TOC
 | Name | SSZ equivalent | Description |
 | - | - | - |
 | `VerticalIndex` | `uint64` | An index identifying a DAS subnet |
-| `HorizontalIndex` | `uint64` | An index identifying a horizontal subnet, this could be a shard subnet. |
 | `SampleIndex` | `uint64` | An index of a sample, w.r.t. the sample-ified extended points of a shard data blob | 
 | `Sample` | `Vector[RawPoint, POINTS_PER_SAMPLE]` | A sequence of points, sample unit |
 
@@ -38,7 +37,7 @@ Don't take values as canonical. The point is to find good values during DAS prot
 | `SLOTS_PER_FAST_ROTATION_MAX` | `32` | slots | Maximum of how frequently a fast vertical subnet subscriptions is randomly swapped. Rotations of a subnet can happen any time between 1 and `SLOTS_PER_FAST_ROTATION_MAX` (incl) slots. |
 | `SLOTS_PER_SLOW_ROTATION` | `2048` | slots | How frequently a slow vertical subnet subscriptions is randomly swapped. (deterministic on peer ID, so public and predictable) |
 | `SLOT_OFFSET_PER_SLOW_INDEX` | `512` | slots | The time for a slow vertical subscription to wait for the previous index to rotate, for stagger effect. |
-| `SAMPLE_SUBNETS` | `MAX_SAMPLES_PER_SHARD_BLOCK * SHARD_COUNT = 16 * 64 = 1024` | subnets | Number of subnets to propagate total samples to | 
+| `SAMPLE_SUBNETS` | `MAX_SAMPLES_PER_SHARD_BLOCK * SHARD_COUNT = 16 * 64 = 1024` | subnets | Total number of vertical subnets | 
 
 
 ## Subnet sampling

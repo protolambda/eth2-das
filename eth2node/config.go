@@ -96,7 +96,7 @@ func (c *Config) Expand() ExpandedConfig {
 type ExpandedConfig struct {
 	Config
 
-	// Number of subnets to propagate total samples to
+	// Total number of vertical subnets
 	SAMPLE_SUBNETS uint64
 
 	// Max bytes per (unextended) block data blob
@@ -110,10 +110,10 @@ func (conf *ExpandedConfig) ShardHeadersTopic() string {
 	return fmt.Sprintf("/eth2/%x/shard_headers/ssz", conf.ForkDigest[:])
 }
 
-func (conf *ExpandedConfig) VertTopic(i DASSubnetIndex) string {
+func (conf *ExpandedConfig) VertTopic(i VerticalIndex) string {
 	return fmt.Sprintf("/eth2/%x/das_vert_%d/ssz", conf.ForkDigest[:], i)
 }
 
-func (conf *ExpandedConfig) ShardTopic(i Shard) string {
-	return fmt.Sprintf("/eth2/%x/shard_%d/ssz", conf.ForkDigest[:], i)
+func (conf *ExpandedConfig) HorzTopic(i Shard) string {
+	return fmt.Sprintf("/eth2/%x/das_horz_%d/ssz", conf.ForkDigest[:], i)
 }
