@@ -20,26 +20,34 @@ TODO TOC
 def shard_data_to_points(input_bytes: bytes) -> Sequence[Point]:
     assert len(input_bytes) <= MAX_DATA_SIZE
 
-    padded_bytes = input_bytes + "\x00" * (sample_target_byte_length - len(input_bytes))
+    # Round up
+    input_point_count = (len(input_bytes) + POINT_SIZE - 1) // POINT_SIZE
     
-    raw_points = [raw_point(padded_bytes, i) for i in range(MAX_DATA_SIZE // POINT_SIZE)]
-    assert len(raw_points) == next_power_of_2(len(raw_points))
-
+    raw_points = [raw_point(padded_bytes, i) for i in range(input_point_count)]
     input_points = [deserialize_point(p) for p in raw_points]
-    
-    extended_width = len(input_points) * 2
+    padded_width = next_power_of_two(len(input_points))
+    padded_points = input_points + [Point(0)] * (padded_width - len(input_points))
+
+    # original points, but in reverse bit order. Simplifies some proofs over the data.
+    even_points = [padded_points[i] for i in reverse_bit_order(padded_width.bitlength())]
+
+    extended_width = len(padded_width) * 2
+    # TODO: allow for variable powers of two in block size?
     assert extended_width == POINTS_PER_SAMPLE * MAX_SAMPLES_PER_SHARD_BLOCK
 
     domain = domain_for_size(extended_width)
     inverse_domain = [modular_inverse(d, MODULUS) for d in domain]  # Or simply reverse the domain (except first 1)
-    odd_points = das_extension(input_points, MODULUS, domain, inverse_domain)
+    odd_points = das_extension(even_points, MODULUS, domain, inverse_domain)
     
-    extended_points = [input_points[i // 2] if i % 2 == 0 else odd_points[i // 2] for i in range(extended_width)]
-    
-    # TODO: changing it to bit-reverse order, so that points are grouped more efficiently for sample proofs
-    reorganized_extended_points = bit_reverse_reorg(extended_points)
-    
-    return reorganized_extended_points
+    return [even_points[i // 2] if i % 2 == 0 else odd_points[i // 2] for i in range(extended_width)]
+
+def reverse_bit_order(bits):
+    if bits == 0:
+        return [0]
+    return (
+        [x*2 for x in reverse_bit_order(bits-1)] +
+        [x*2+1 for x in reverse_bit_order(bits-1)] 
+    )
 ```
 
 ### Mapping points to shard data

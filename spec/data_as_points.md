@@ -60,7 +60,7 @@ For practical purposes the closest byte boundary is chosen instead, thus `POINT_
 
 ```python
 def deserialize_point(p: RawPoint) -> Point:
-    return Point(uint256.from_bytes(p))
+    return Point(uint256.from_bytes(p, byteorder='little'))
 
 def raw_point(input_bytes: bytes, i: PointIndex) -> RawPoint:
     return RawPoint(input_bytes[i*31:(i+1)*31] + "\x00")

@@ -1,6 +1,9 @@
 package eth2node
 
-import "github.com/protolambda/zrnt/eth2/beacon"
+import (
+	verkle "github.com/protolambda/go-verkle"
+	"github.com/protolambda/zrnt/eth2/beacon"
+)
 
 type VerticalIndex uint64
 
@@ -11,6 +14,10 @@ type Shard = beacon.Shard
 type Slot = beacon.Slot
 type Epoch = beacon.Epoch
 type BLSSignature = beacon.BLSSignature
+
+type PointIndex uint64
+type Point = verkle.Big
+type RawPoint [POINT_SIZE]byte
 
 type ShardBlock struct {
 	ShardParentRoot Root
