@@ -22,7 +22,7 @@ func (n *Eth2Node) rotatePSubnets(slot Slot) {
 				continue
 			}
 
-			// TODO: technically one of the random K rotations might hit it soon, re-subscribing to the same topic.
+			// TODO: technically one of the random FAST_INDICES rotations might hit it soon, re-subscribing to the same topic.
 			// Resubscribing shouldn't be a big issue if peer connections are maintained between the leave and join.
 			// (un)-subscriptions are also ignored for gossip scoring currently.
 			info.sub.Cancel()
@@ -37,9 +37,9 @@ func (n *Eth2Node) rotatePSubnets(slot Slot) {
 		}
 		// sometimes we are already subscribed to it privately. Move it over then.
 		if v, ok := n.kIndices[subnet]; ok {
-			// Remove from K subset, add to P subset
+			// Remove from FAST_INDICES subset, add to SLOW_INDICES subset
 			delete(n.kIndices, subnet)
-			// just get the regular subnet info, strip out the rotation that was part of the K subnets logic.
+			// just get the regular subnet info, strip out the rotation that was part of the FAST_INDICES subnets logic.
 			n.pIndices[subnet] = &v.subnetInfo
 			continue
 		}
@@ -60,7 +60,7 @@ func (n *Eth2Node) rotatePSubnets(slot Slot) {
 
 // rotateKSubnets, like rotatePSubnets, rotates subnets and does so robustly.
 // But instead of deterministically and publicly predictable subscribing, it is based on private local randomness.
-// Subscriptions in K won't overlap with those in P, to avoid double work.
+// Subscriptions in FAST_INDICES won't overlap with those in SLOW_INDICES, to avoid double work.
 func (n *Eth2Node) rotateKSubnets(slot Slot) {
 	// Swap things as scheduled, with something that is not already in our public subnet indices
 
@@ -74,7 +74,7 @@ func (n *Eth2Node) rotateKSubnets(slot Slot) {
 			delete(n.kIndices, subnet)
 		}
 	}
-	// now fill back up to K with random subnets
+	// now fill back up to FAST_INDICES with random subnets
 	randomUint64 := func() uint64 {
 		var indexBuf [8]byte
 		if _, err := rand.Read(indexBuf[:]); err != nil {
@@ -91,15 +91,15 @@ func (n *Eth2Node) rotateKSubnets(slot Slot) {
 		return slot + 1 + Slot(randomUint64()%n.conf.SLOTS_PER_K_ROTATION_MAX)
 	}
 
-	for i := uint64(len(n.kIndices)); i < n.conf.K; i++ {
+	for i := uint64(len(n.kIndices)); i < n.conf.FAST_INDICES; i++ {
 		for { // try random subnets until we find one that works
-			// (given a small K and P, and large CHUNK_INDEX_SUBNETS, trial-and-error should be fast)
+			// (given a small FAST_INDICES and SLOW_INDICES, and large CHUNK_INDEX_SUBNETS, trial-and-error should be fast)
 			subnet := randomSubnet()
-			// must not be part of P already
+			// must not be part of SLOW_INDICES already
 			if _, ok := n.pIndices[subnet]; ok {
 				continue
 			}
-			// must not be part of K already
+			// must not be part of FAST_INDICES already
 			if _, ok := n.kIndices[subnet]; ok {
 				continue
 			}
@@ -107,13 +107,13 @@ func (n *Eth2Node) rotateKSubnets(slot Slot) {
 			if v, ok := old[subnet]; ok {
 				delete(old, subnet)
 
-				n.log.With("subnet", subnet, "slot", slot).Debug("re-subscribing to K subnet")
+				n.log.With("subnet", subnet, "slot", slot).Debug("re-subscribing to FAST_INDICES subnet")
 				n.kIndices[subnet] = &subnetKInfo{
 					subnetInfo: *v,             // same old subnet
 					expiry:     randomExpiry(), // new expiry time
 				}
 			} else {
-				n.log.With("subnet", subnet, "slot", slot).Debug("subscribing to new K subnet")
+				n.log.With("subnet", subnet, "slot", slot).Debug("subscribing to new FAST_INDICES subnet")
 				t := n.dasSubnets[subnet]
 				sub, err := t.Subscribe() // the new subnet!
 				if err != nil {
@@ -135,7 +135,7 @@ func (n *Eth2Node) rotateKSubnets(slot Slot) {
 
 	// for any old subnets that were not reused, unsubscribe
 	for subnet, info := range old {
-		n.log.With("subnet", subnet, "slot", slot).Debug("unsubscribing from K subnet")
+		n.log.With("subnet", subnet, "slot", slot).Debug("unsubscribing from FAST_INDICES subnet")
 		info.sub.Cancel()
 	}
 }

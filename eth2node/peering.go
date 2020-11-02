@@ -6,7 +6,7 @@ import (
 
 func (n *Eth2Node) peersUpdate(slot Slot) {
 	// determine set of subnets we are on
-	subnets := make(map[DASSubnetIndex]struct{}, n.conf.P+n.conf.K)
+	subnets := make(map[DASSubnetIndex]struct{}, n.conf.SLOW_INDICES+n.conf.FAST_INDICES)
 	for subnet := range n.pIndices {
 		subnets[subnet] = struct{}{}
 	}

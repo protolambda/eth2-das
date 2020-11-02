@@ -7,7 +7,7 @@ import (
 )
 
 // DasPublicPeerSeed defines a seed specific to the peer.
-// So that its selection of P dasSubnets is different from other honest peers, and predictable.
+// So that its selection of SLOW_INDICES dasSubnets is different from other honest peers, and predictable.
 func (conf *ExpandedConfig) DasPublicPeerSeed(id peer.ID) (out [32]byte) {
 	h := sha256.New()
 	h.Write([]byte("das domain"))
@@ -25,14 +25,14 @@ func (conf *ExpandedConfig) DasPublicPeerSlotOffset(peerSeed [32]byte) Slot {
 	return Slot(binary.LittleEndian.Uint64(peerSeed[:8]) % conf.SLOTS_PER_P_ROTATION)
 }
 
-// DasPublicSubnetSlotOffset defines an offset specific to each entry i of the P dasSubnets,
+// DasPublicSubnetSlotOffset defines an offset specific to each entry i of the SLOW_INDICES dasSubnets,
 // used to avoid sudden updates all at once.
 func (conf *ExpandedConfig) DasPublicSubnetSlotOffset(i uint64) Slot {
 	return Slot((i * conf.SLOT_OFFSET_PER_P_INDEX) % conf.SLOTS_PER_P_ROTATION)
 }
 
 // DasPublicSubnetIndex defines how a peer Seed, some slot (with offsets applied),
-// and a P entry index map to a subnet choice.
+// and a SLOW_INDICES entry index map to a subnet choice.
 func (conf *ExpandedConfig) DasPublicSubnetIndex(peerSeed [32]byte, slot Slot, i uint64) DASSubnetIndex {
 	windowIndex := uint64(slot) / conf.SLOTS_PER_P_ROTATION
 	h := sha256.New()
@@ -42,7 +42,7 @@ func (conf *ExpandedConfig) DasPublicSubnetIndex(peerSeed [32]byte, slot Slot, i
 	return DASSubnetIndex(binary.LittleEndian.Uint64(h.Sum(nil)[:8]) % conf.CHUNK_INDEX_SUBNETS)
 }
 
-// DasPublicSubnetIndices defines to which dasSubnets a peer is publicly subscribed to at slot, given its index count (its P).
+// DasPublicSubnetIndices defines to which dasSubnets a peer is publicly subscribed to at slot, given its index count (its SLOW_INDICES).
 // This could be called to describe remote nodes, with minimal information (just their peer ID and das_p from ENR/metadata)
 func (conf *ExpandedConfig) DasPublicSubnetIndices(id peer.ID, slot Slot, dasP uint64) map[DASSubnetIndex]struct{} {
 	peerSeed := conf.DasPublicPeerSeed(id)

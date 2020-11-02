@@ -12,7 +12,7 @@ TODO TOC
 <!-- /TOC -->
 
 
-| `MAX_DATA_SIZE` | `POINT_SIZE * POINTS_PER_SAMPLE * MAX_SAMPLES_PER_SHARD_BLOCK // 2` | bytes | max bytes per (unextended) block data blob |
+| `MAX_DATA_SIZE` | `POINT_SIZE * POINTS_PER_SAMPLE * MAX_SAMPLES_PER_SHARD_BLOCK // 2` | bytes | Max bytes per (unextended) block data blob |
 
 ### Mapping shard data to points
 

@@ -38,7 +38,6 @@ Don't take values as canonical. The point is to find good values during DAS prot
 | `SLOTS_PER_FAST_ROTATION_MAX` | `32` | slots | Maximum of how frequently a fast vertical subnet subscriptions is randomly swapped. Rotations of a subnet can happen any time between 1 and `SLOTS_PER_FAST_ROTATION_MAX` (incl) slots. |
 | `SLOTS_PER_SLOW_ROTATION` | `2048` | slots | How frequently a slow vertical subnet subscriptions is randomly swapped. (deterministic on peer ID, so public and predictable) |
 | `SLOT_OFFSET_PER_SLOW_INDEX` | `512` | slots | The time for a slow vertical subscription to wait for the previous index to rotate, for stagger effect. |
-| `EPOCHS_PER_RANDOM_SUBNET_SUBSCRIPTION` | `256` | epochs | how frequently shard subnet subscriptions are kept |
 | `SAMPLE_SUBNETS` | `MAX_SAMPLES_PER_SHARD_BLOCK * SHARD_COUNT = 16 * 64 = 1024` | subnets | Number of subnets to propagate total samples to | 
 
 

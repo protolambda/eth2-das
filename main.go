@@ -25,8 +25,8 @@ func das(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 	ctx := context.Background()
 	// TODO parameters
 	conf := &eth2node.Config{
-		K:                                     16,
-		P:                                     4,
+		FAST_INDICES:                          16,
+		SLOW_INDICES:                          4,
 		CHUNK_SIZE:                            512,
 		MAX_BLOCK_SIZE:                        524288,
 		SHARD_HEADER_SIZE:                     256,
@@ -35,7 +35,6 @@ func das(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 		SLOTS_PER_K_ROTATION_MAX:              32, // TODO
 		SLOTS_PER_P_ROTATION:                  320,
 		SLOT_OFFSET_PER_P_INDEX:               16,
-		EPOCHS_PER_RANDOM_SUBNET_SUBSCRIPTION: 256,
 		SHUFFLE_ROUND_COUNT:                   90,
 		VALIDATOR_COUNT:                       150000, // TODO
 		NODE_COUNT:                            10000,  // TODO

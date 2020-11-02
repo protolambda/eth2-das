@@ -180,7 +180,7 @@ func (n *Eth2Node) Start(ip net.IP, port uint64) error {
 		return errors.Wrap(err, "failed to bind to network interface")
 	}
 
-	// This initializes the initial P and K subscriptions
+	// This initializes the initial SLOW_INDICES and FAST_INDICES subscriptions
 	if err := n.initialSubscriptions(); err != nil {
 		return errors.Wrap(err, "failed to open initial subscriptions")
 	}
@@ -281,7 +281,7 @@ func (n *Eth2Node) Close() error {
 }
 
 func (n *Eth2Node) publicDasSubset(slot Slot) map[DASSubnetIndex]struct{} {
-	return n.conf.DasPublicSubnetIndices(n.h.ID(), slot, n.conf.P)
+	return n.conf.DasPublicSubnetIndices(n.h.ID(), slot, n.conf.SLOW_INDICES)
 }
 
 func (n *Eth2Node) initialSubscriptions() error {

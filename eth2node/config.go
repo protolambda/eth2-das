@@ -5,40 +5,46 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 )
 
-type Config struct {
-	// Subset of indices that nodes sample, privately
-	K uint64
-	// Subset of indices that nodes sample, publicly
-	P uint64
+const POINT_SIZE = 31
 
-	// Number of bytes per chunk (index)
-	CHUNK_SIZE uint64
-	// Number of bytes in a block
-	MAX_BLOCK_SIZE uint64
-	// Number of bytes in a shard header
-	SHARD_HEADER_SIZE uint64
+type Config struct {
+	// Sampling configuration
+	// ----------------------------------
+
+	// Subset of indices that nodes sample, privately chosen, and replaced quickly
+	FAST_INDICES uint64
+	// Subset of indices that nodes sample, publicly determined, and replaced slowly
+	SLOW_INDICES uint64
+
+	// Maximum number of samples in which the extended points are split into
+	MAX_SAMPLES_PER_SHARD_BLOCK uint64
+	// Number of points per sample
+	POINTS_PER_SAMPLE uint64
+
+	// Number of bytes in a shard block
+	MAX_SHARD_BLOCK_SIZE uint64
+
+	// Maximum of how frequently a fast vertical subnet subscriptions is randomly swapped.
+	// Rotations of a subnet can happen any time between 1 and SLOTS_PER_FAST_ROTATION_MAX (incl) slots.
+	SLOTS_PER_FAST_ROTATION_MAX uint64
+
+	// How frequently a slow vertical subnet subscriptions is randomly swapped.
+	// (deterministic on peer ID, so public and predictable)
+	SLOTS_PER_SLOW_ROTATION uint64
+
+	// The time for a slow vertical subscription to wait for the previous index to rotate, for stagger effect..
+	// If SLOW_INDICES > SLOTS_PER_SLOW_ROTATION / SLOT_OFFSET_PER_SLOW_INDEX then multiple indices
+	// may be rotating closer together / at once. This would be considered super-node territory,
+	// not normal, and not a benefit, nor a big negative.
+	SLOT_OFFSET_PER_SLOW_INDEX uint64
+
+	// General configuration
+	// ----------------------------------
+
 	// Number of shards
 	SHARD_COUNT uint64
 	// Number of seconds in each slot
 	SECONDS_PER_SLOT uint64
-
-	// Maximum of how frequently one of the K dasSubnets are randomly swapped.
-	// Rotations of a subnet in K can happen any time between 1 and SLOTS_PER_K_ROTATION_MAX (incl) slots.
-	SLOTS_PER_K_ROTATION_MAX uint64
-
-	// How frequently each of the P dasSubnets are randomly swapped.
-	// (deterministic on peer ID, so public and predictable)
-	// Offset logic is applied to avoid all P updating at once at an SLOTS_PER_P_ROTATION interval.
-	SLOTS_PER_P_ROTATION uint64
-
-	// SLOT_OFFSET_PER_P_INDEX is the time for an index of P to wait for the previous index to rotate.
-	// If P > SLOTS_PER_P_ROTATION / SLOT_OFFSET_PER_P_INDEX then multiple indices
-	// may be rotating closer together / at once. This would be considered super-node territory,
-	// not normal, and not a benefit, nor a big negative.
-	SLOT_OFFSET_PER_P_INDEX uint64
-
-	// how frequently shard subnet subscriptions are kept
-	EPOCHS_PER_RANDOM_SUBNET_SUBSCRIPTION uint64
 
 	// Number of active validators
 	VALIDATOR_COUNT uint64
@@ -48,12 +54,13 @@ type Config struct {
 	// Fork digest, put in the topic names
 	ForkDigest [4]byte
 
-	// How many peers we should try to maintain for each of the P and K subnets, when to hit discovery.
+	// How many peers we should try to maintain for each of the SLOW_INDICES and FAST_INDICES subnets, when to hit discovery.
 	// Gossipsub will do some peer management for us too, but may not find peers as quickly.
 	TARGET_PEERS_PER_DAS_SUB uint64
-	// The Low water should be at least TARGET_PEERS_PER_DAS_SUB * (P + K)
-	// if CHUNK_INDEX_SUBNETS is very large compared to (P + K).
-	// However, peers may cover multiple of our P and K topics, so it is OK to have a little less.
+
+	// The Low water should be at least TARGET_PEERS_PER_DAS_SUB * (SLOW_INDICES + FAST_INDICES)
+	// if CHUNK_INDEX_SUBNETS is very large compared to (SLOW_INDICES + FAST_INDICES).
+	// However, peers may cover multiple of our SLOW_INDICES and FAST_INDICES topics, so it is OK to have a little less.
 	// We could try and optimize by selecting good short-term peers from the backbone that cover multiple topic needs,
 	// but that seems fragile.
 	PEER_COUNT_LO uint64
@@ -66,29 +73,35 @@ type Config struct {
 	// for shuffling shard committees
 	SHUFFLE_ROUND_COUNT uint8
 
-	DAS_SUBNET_TOPIC_SCORE_PARAMS    *pubsub.TopicScoreParams
-	SHARD_SUBNET_TOPIC_SCORE_PARAMS  *pubsub.TopicScoreParams
+	VERT_SUBNET_TOPIC_SCORE_PARAMS   *pubsub.TopicScoreParams
+	HORZ_SUBNET_TOPIC_SCORE_PARAMS   *pubsub.TopicScoreParams
 	SHARD_HEADERS_TOPIC_SCORE_PARAMS *pubsub.TopicScoreParams
 	GOSSIP_GLOBAL_SCORE_PARAMS       *pubsub.PeerScoreParams
 	GOSSIP_GLOBAL_SCORE_THRESHOLDS   *pubsub.PeerScoreThresholds
 }
 
 func (c *Config) Expand() ExpandedConfig {
-	subnets := c.MAX_BLOCK_SIZE / c.CHUNK_SIZE
-	if c.K+c.P > subnets {
-		panic("invalid configuration! Need K + P <= CHUNK_INDEX_SUBNETS")
+	subnets := c.MAX_SAMPLES_PER_SHARD_BLOCK * c.SHARD_COUNT
+	if c.FAST_INDICES+c.SLOW_INDICES > subnets {
+		panic("invalid configuration! Need FAST_INDICES + SLOW_INDICES <= subnets")
 	}
 	return ExpandedConfig{
 		Config:                      *c,
-		CHUNK_INDEX_SUBNETS:         subnets,
+		SAMPLE_SUBNETS:              subnets,
+		MAX_DATA_SIZE:               POINT_SIZE * c.POINTS_PER_SAMPLE * c.MAX_SAMPLES_PER_SHARD_BLOCK / 2,
 		AVERAGE_VALIDATORS_PER_NODE: c.VALIDATOR_COUNT / c.NODE_COUNT,
 	}
 }
 
 type ExpandedConfig struct {
 	Config
-	// Number of chunks that make up a block
-	CHUNK_INDEX_SUBNETS uint64
+
+	// Number of subnets to propagate total samples to
+	SAMPLE_SUBNETS uint64
+
+	// Max bytes per (unextended) block data blob
+	MAX_DATA_SIZE uint64
+
 	// validators per node
 	AVERAGE_VALIDATORS_PER_NODE uint64
 }
