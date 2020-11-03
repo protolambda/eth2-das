@@ -27,6 +27,7 @@ require (
 	github.com/prometheus/client_golang v1.8.0 // indirect
 	github.com/protolambda/go-verkle v0.0.0-20201022180838-02488f01667c
 	github.com/protolambda/zrnt v0.12.5
+	github.com/protolambda/ztyp v0.1.1
 	github.com/testground/sdk-go v0.2.5
 	go.opencensus.io v0.22.5 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
@@ -38,3 +39,7 @@ require (
 )
 
 replace github.com/protolambda/go-verkle => ../go-verkle
+
+replace github.com/protolambda/zrnt => ../zrnt
+
+replace github.com/protolambda/ztyp => ../ztyp

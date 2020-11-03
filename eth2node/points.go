@@ -6,18 +6,18 @@ import (
 	"github.com/protolambda/ztyp/tree"
 )
 
-func (c *ExpandedConfig) TakeSample(data ShardBlockData) ([]ShardBlockDataChunk, error) {
+func (c *ExpandedConfig) MakeSamples(data ShardBlockData) ([]ShardBlockDataChunk, error) {
 	dataPoints, err := c.shardDataToPoints(data)
 	if err != nil {
 		return nil, err
 	}
 	sampleCount := uint64(len(dataPoints)) / c.POINTS_PER_SAMPLE
-	if sampleCount * c.POINTS_PER_SAMPLE != uint64(len(dataPoints)) {
+	if sampleCount*c.POINTS_PER_SAMPLE != uint64(len(dataPoints)) {
 		return nil, fmt.Errorf("bad data-points count %d, expected it to be divisible by sample chunk size: %d", len(dataPoints), c.POINTS_PER_SAMPLE)
 	}
 	out := make([]ShardBlockDataChunk, sampleCount, sampleCount)
 	for i := uint64(0); i < sampleCount; i++ {
-		start := i*c.POINTS_PER_SAMPLE
+		start := i * c.POINTS_PER_SAMPLE
 		sample := out[i]
 		for j := uint64(0); j < c.POINTS_PER_SAMPLE; j++ {
 			p := &dataPoints[start+j]
@@ -46,8 +46,8 @@ func (c *ExpandedConfig) shardDataToPoints(input []byte) ([]Point, error) {
 	points := make([]Point, inputPointsPaddedLen, inputPointsPaddedLen)
 	for i := uint64(0); i < inputPoints; i++ {
 		var tmp [31]byte
-		copy(tmp[:], input[i*POINT_SIZE:])  // copy the next 31 bytes (or less if clipped end)
-		verkle.BigNumFrom31(&points[changedOrder[i]], tmp)  // directly put it into its reverse-bitorder place
+		copy(tmp[:], input[i*POINT_SIZE:])                 // copy the next 31 bytes (or less if clipped end)
+		verkle.BigNumFrom31(&points[changedOrder[i]], tmp) // directly put it into its reverse-bitorder place
 	}
 	// pad the input with zeros
 	for i := inputPoints; i < inputPointsPaddedLen; i++ {

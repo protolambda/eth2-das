@@ -1,9 +1,16 @@
 package eth2node
 
 import (
+	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
+	"fmt"
 	"github.com/protolambda/zrnt/eth2/beacon"
+	"github.com/protolambda/ztyp/codec"
+	"io"
+	"math/rand"
+	"time"
 )
 
 func (n *Eth2Node) scheduleShardProposalsMaybe(slot Slot) {
@@ -38,7 +45,70 @@ func (n *Eth2Node) computeShardProposers(slot Slot) []ValidatorIndex {
 }
 
 func (n *Eth2Node) executeShardBlockProposal(slot Slot, shard Shard, proposer ValidatorIndex) {
-	// TODO create shard block
-	// TODO put it on the shard committee topic
-	// TODO put its header on the shard headers topic
+	// create shard block, with mock data
+	dataSize := n.conf.MAX_DATA_SIZE
+	data := make([]byte, dataSize, dataSize)
+	seed := int64(uint64(slot)*n.conf.SHARD_COUNT + uint64(shard))
+	rng := rand.New(rand.NewSource(seed))
+	if _, err := io.ReadFull(rng, data); err != nil {
+		panic(fmt.Errorf("failed to create random mock data: %v", err))
+	}
+	block := SignedShardBlock{
+		Message: ShardBlock{
+			ShardParentRoot:  Root{}, // TODO
+			BeaconParentRoot: Root{}, // TODO
+			Slot:             slot,
+			Shard:            shard,
+			ProposerIndex:    proposer,
+			Body:             ShardBlockData(data),
+		},
+		Signature: BLSSignature{}, // TODO
+	}
+	header := SignedShardBlockHeader{
+		Message: ShardBlockHeader{
+			ShardParentRoot:  Root{}, // TODO
+			BeaconParentRoot: Root{}, // TODO
+			Slot:             slot,
+			Shard:            shard,
+			ProposerIndex:    proposer,
+			BodyRoot:         Root{}, // TODO
+		},
+		Signature: BLSSignature{}, // TODO
+	}
+
+	// try publishing everything for the extension of 2/3 of a slot. Give up afterwards.
+	slotDuration := time.Second * time.Duration(n.conf.SECONDS_PER_SLOT)
+	ctx, _ := context.WithTimeout(n.subProcesses.ctx, 2*slotDuration/3)
+	// Publish header to global net
+	{
+		var buf bytes.Buffer
+		if err := header.Serialize(codec.NewEncodingWriter(&buf)); err != nil {
+
+		}
+		if err := n.shardHeaders.Publish(ctx, buf.Bytes()); err != nil {
+
+		}
+	}
+
+	// Publish block to horizontal net
+	{
+		var buf bytes.Buffer
+		if err := block.Serialize(codec.NewEncodingWriter(&buf)); err != nil {
+
+		}
+		if err := n.horizontalSubnets[shard].Publish(ctx, buf.Bytes()); err != nil {
+
+		}
+	}
+
+	// Publish samples to vertical nets
+	{
+		samples, err := n.conf.MakeSamples(block.Message.Body)
+		if err != nil {
+
+		}
+		for i, sample := range samples {
+			// TODO publish
+		}
+	}
 }

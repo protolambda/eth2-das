@@ -23,30 +23,7 @@ This includes:
 
 ### The `eth2node` package
 
-A mock Eth2 node with the Phase 1 functionality, and instrumentation for gossip tests.
-
-- register topics:
-  - `VERTICAL_SUBNETS` DAS subnets
-  - `HORIZONTAL_SUBNETS` Distribution subnets, could be shard subnets.
-  - Shard headers global topic
-- Subscribe to `P` DAS subnets randomly based on publicly known seed, unique to peer.
-  - For stability
-  - Find other peers via discovery (TODO add discovery)
-- Subscribe to `K` DAS subnets randomly 
-  - The random sampling necessary to make DAS work secure enough
-  - Verify if all the seen samples are correct
-    - TODO: keep track of what has been seen, *and what has not*
-      - Adjust forkchoice to steer clear of unavailable shard data
-- Subscribe randomly to a shard block subnet for every Validator that runs
-  - Rotate out on random `[EPOCHS_PER_RANDOM_SUBNET_SUBSCRIPTION, 2 * EPOCHS_PER_RANDOM_SUBNET_SUBSCRIPTION]` interval (per shard)
-  - For any seen block, split it up in samples, and for each DAS subnet we are on, propagate the relevant samples to it.
-- Subscribe to shard headers topic
-- Validate DAS subnets:
-  - TODO
-- Validate Shard subnets:
-  - TODO
-- Validate Shard headers topic:
-  - TODO
+A mock Eth2 node with just the Phase 1 DAS functionality (sampling, networking, propagation, validation, processing), and instrumentation for gossip tests.
 
 ### Misc. configurables
 
