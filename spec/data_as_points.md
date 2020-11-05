@@ -16,7 +16,6 @@ TODO TOC
 | Name | SSZ equivalent | Description |
 | - | - | - |
 | `PointIndex` | `uint64` | An index of a point, w.r.t. the extended points of a shard data blob |
-| `RawPoint` | `Vector[byte, POINT_SIZE]` | A raw point, serialized form |
 | `Point` | `uint256` | A point, `F_r` element |
 
 ### Constants / configurables
@@ -25,7 +24,8 @@ TODO TOC
 
 These values are not intended to change.
 
-| `POINT_SIZE` | `31` | bytes | Number of bytes per point |
+| `BYTES_PER_DATA_POINT` | `31` | bytes | Number of bytes of input data per point |
+| `BYTES_PER_FULL_POINT` | `32` | bytes | Number of bytes a point is represented with |
 
 
 #### Configurables
@@ -56,15 +56,10 @@ The Kate commitments, proofs and data recovery all rely on the data be interpret
 I.e. the raw data is partitioned in values that fit in a modulo `r` (BLS curve order) field.
 The modulo is just shy of spanning 256 bits, thus partitioning the bytes in 32 byte samples will not work.
 There is an option to partition data in 254 bits to use as many bits as possible.
-For practical purposes the closest byte boundary is chosen instead, thus `POINT_SIZE = 31 bytes`.
+For practical purposes the closest byte boundary is chosen instead, thus `BYTES_PER_DATA_POINT = 31 bytes`.
 
-```python
-def deserialize_point(p: RawPoint) -> Point:
-    return Point(uint256.from_bytes(p, byteorder='little'))
-
-def raw_point(input_bytes: bytes, i: PointIndex) -> RawPoint:
-    return RawPoint(input_bytes[i*31:(i+1)*31] + "\x00")
-```
+For other purposes, such as extending the data and building proofs, the full range is required to represent the points.
+Thus `BYTES_PER_FULL_POINT = 32`.
 
 ## Data extension
 

@@ -19,7 +19,7 @@ TODO TOC
 | - | - | - |
 | `VerticalIndex` | `uint64` | An index identifying a DAS subnet |
 | `SampleIndex` | `uint64` | An index of a sample, w.r.t. the sample-ified extended points of a shard data blob | 
-| `Sample` | `Vector[RawPoint, POINTS_PER_SAMPLE]` | A sequence of points, sample unit |
+| `Sample` | `Vector[Point, POINTS_PER_SAMPLE]` | A sequence of points, sample unit |
 
 ## Constants / configurables
 
@@ -187,7 +187,7 @@ def das_private_subnets_update(
 
 ```python
 
-def take_sample(extended_points: Sequence[RawPoint], sample_index: SampleIndex) -> Sample:
+def take_sample(extended_points: Sequence[Point], sample_index: SampleIndex) -> Sample:
     start = sample_index * POINTS_PER_SAMPLE
     return Sample(extended_points[start:start+POINTS_PER_SAMPLE])
 ```

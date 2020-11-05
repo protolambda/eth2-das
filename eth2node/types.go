@@ -19,7 +19,6 @@ type BLSSignature = beacon.BLSSignature
 
 type PointIndex uint64
 type Point = verkle.Big
-type RawPoint [POINT_SIZE]byte
 
 type ShardBlock struct {
 	ShardParentRoot  Root

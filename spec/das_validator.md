@@ -12,19 +12,16 @@ TODO TOC
 <!-- /TOC -->
 
 
-| `MAX_DATA_SIZE` | `POINT_SIZE * POINTS_PER_SAMPLE * MAX_SAMPLES_PER_SHARD_BLOCK // 2` | bytes | Max bytes per (unextended) block data blob |
+| `MAX_DATA_SIZE` | `BYTES_PER_DATA_POINT * POINTS_PER_SAMPLE * MAX_SAMPLES_PER_SHARD_BLOCK // 2` | bytes | Max bytes per (unextended) block data blob |
 
 ### Mapping shard data to points
 
 ```python
 def shard_data_to_points(input_bytes: bytes) -> Sequence[Point]:
     assert len(input_bytes) <= MAX_DATA_SIZE
-
-    # Round up
-    input_point_count = (len(input_bytes) + POINT_SIZE - 1) // POINT_SIZE
     
-    raw_points = [raw_point(padded_bytes, i) for i in range(input_point_count)]
-    input_points = [deserialize_point(p) for p in raw_points]
+    input_points = [deserialize_point(input_bytes[offset:min(offset+BYTES_PER_DATA_POINT, len(input_bytes))])
+                     for offset in range(0, len(input_bytes), BYTES_PER_DATA_POINT)]
     padded_width = next_power_of_two(len(input_points))
     padded_points = input_points + [Point(0)] * (padded_width - len(input_points))
 

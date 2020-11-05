@@ -21,8 +21,8 @@ func (c *ExpandedConfig) MakeSamples(data ShardBlockData) ([]ShardBlockDataChunk
 		sample := out[i]
 		for j := uint64(0); j < c.POINTS_PER_SAMPLE; j++ {
 			p := &dataPoints[start+j]
-			raw := verkle.BigNumTo31(p)
-			copy(sample[j*POINT_SIZE:(j+1)*POINT_SIZE], raw[:])
+			raw := verkle.BigNumTo32(p)
+			copy(sample[j*BYTES_PER_FULL_POINT:(j+1)*BYTES_PER_FULL_POINT], raw[:])
 		}
 	}
 	return out, nil
@@ -34,7 +34,7 @@ func (c *ExpandedConfig) shardDataToPoints(input []byte) ([]Point, error) {
 		return nil, fmt.Errorf("data is too large: %d bytes, expected no more than %d", len(input), c.MAX_DATA_SIZE)
 	}
 	// round up
-	inputPoints := (l + POINT_SIZE - 1) / POINT_SIZE
+	inputPoints := (l + BYTES_PER_DATA_POINT - 1) / BYTES_PER_DATA_POINT
 
 	// Get depth of next power of 2 (if not already)
 	// Example (in, out):
@@ -45,9 +45,12 @@ func (c *ExpandedConfig) shardDataToPoints(input []byte) ([]Point, error) {
 	changedOrder := reverseBitOrder(inputPointsPaddedLen)
 	points := make([]Point, inputPointsPaddedLen, inputPointsPaddedLen)
 	for i := uint64(0); i < inputPoints; i++ {
-		var tmp [31]byte
-		copy(tmp[:], input[i*POINT_SIZE:])                 // copy the next 31 bytes (or less if clipped end)
-		verkle.BigNumFrom31(&points[changedOrder[i]], tmp) // directly put it into its reverse-bitorder place
+		// handled as regular full point internally.
+		var tmp [BYTES_PER_FULL_POINT]byte
+		// copy the next 31 bytes (or less if clipped end)
+		copy(tmp[:BYTES_PER_DATA_POINT], input[i*BYTES_PER_DATA_POINT:])
+		// directly put it into its reverse-bitorder place
+		verkle.BigNumFrom32(&points[changedOrder[i]], tmp)
 	}
 	// pad the input with zeros
 	for i := inputPoints; i < inputPointsPaddedLen; i++ {

@@ -5,7 +5,8 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 )
 
-const POINT_SIZE = 31
+const BYTES_PER_DATA_POINT = 31
+const BYTES_PER_FULL_POINT = 32
 
 type Config struct {
 	// Sampling configuration
@@ -85,7 +86,7 @@ func (c *Config) Expand() ExpandedConfig {
 	return ExpandedConfig{
 		Config:                      *c,
 		SAMPLE_SUBNETS:              subnets,
-		MAX_DATA_SIZE:               POINT_SIZE * c.POINTS_PER_SAMPLE * c.MAX_SAMPLES_PER_SHARD_BLOCK / 2,
+		MAX_DATA_SIZE:               BYTES_PER_DATA_POINT * c.POINTS_PER_SAMPLE * c.MAX_SAMPLES_PER_SHARD_BLOCK / 2,
 		AVERAGE_VALIDATORS_PER_NODE: c.VALIDATOR_COUNT / c.NODE_COUNT,
 	}
 }
