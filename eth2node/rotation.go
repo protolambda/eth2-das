@@ -107,13 +107,13 @@ func (n *Eth2Node) rotateFastVertSubnets(slot Slot) {
 			if v, ok := old[subnet]; ok {
 				delete(old, subnet)
 
-				n.log.With("subnet", subnet, "slot", slot).Debug("re-subscribing to FAST_INDICES subnet")
+				//n.log.With("subnet", subnet, "slot", slot).Debug("re-subscribing to FAST_INDICES subnet")
 				n.fastIndices[subnet] = &subnetFastInfo{
 					subnetInfo: *v,             // same old subnet
 					expiry:     randomExpiry(), // new expiry time
 				}
 			} else {
-				n.log.With("subnet", subnet, "slot", slot).Debug("subscribing to new FAST_INDICES subnet")
+				//n.log.With("subnet", subnet, "slot", slot).Debug("subscribing to new FAST_INDICES subnet")
 				t := n.verticalSubnets[subnet]
 				sub, err := t.Subscribe() // the new subnet!
 				if err != nil {
@@ -134,8 +134,8 @@ func (n *Eth2Node) rotateFastVertSubnets(slot Slot) {
 	}
 
 	// for any old subnets that were not reused, unsubscribe
-	for subnet, info := range old {
-		n.log.With("subnet", subnet, "slot", slot).Debug("unsubscribing from FAST_INDICES subnet")
+	for _, info := range old {
+		//n.log.With("subnet", subnet, "slot", slot).Debug("unsubscribing from FAST_INDICES subnet")
 		info.sub.Cancel()
 	}
 }

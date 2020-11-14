@@ -137,6 +137,7 @@ func New(ctx context.Context, conf *Config, disc Discovery, log *zap.SugaredLogg
 		conf:            expandedConf,
 		dialReq:         make(chan peer.ID, 30), // don't try to schedule too many dials at a time.
 		localValidators: make(map[ValidatorIndex]struct{}),
+		horizontalSubs:  make(map[Shard]*pubsub.Subscription),
 		slowIndices:     make(map[VerticalIndex]*subnetInfo),
 		fastIndices:     make(map[VerticalIndex]*subnetFastInfo),
 		log:             log,
@@ -165,7 +166,7 @@ func (n *Eth2Node) RegisterValidators(indices ...ValidatorIndex) {
 func (n *Eth2Node) ListValidators() (out []ValidatorIndex) {
 	n.validatorsLock.RLock()
 	defer n.validatorsLock.RUnlock()
-	out = make([]ValidatorIndex, len(n.localValidators))
+	out = make([]ValidatorIndex, 0, len(n.localValidators))
 	for i := range n.localValidators {
 		out = append(out, i)
 	}
@@ -199,7 +200,7 @@ func (n *Eth2Node) Start(ip net.IP, port uint16) error {
 func (n *Eth2Node) slotWithOffset(t time.Time, offset time.Duration) (slot Slot, preGenesis bool) {
 	genesisTime := time.Unix(int64(n.conf.GENESIS_TIME), 0)
 	sinceGenesis := t.Add(offset).Sub(genesisTime)
-	slotFloat := math.Round(sinceGenesis.Seconds() / float64(n.conf.SECONDS_PER_SLOT))
+	slotFloat := math.Floor(sinceGenesis.Seconds() / float64(n.conf.SECONDS_PER_SLOT))
 	if slotFloat < 0 {
 		return Slot(uint64(-slotFloat)), true
 	} else {
@@ -389,9 +390,9 @@ func (n *Eth2Node) handleTopicEvents(name string, t *pubsub.Topic) {
 		}
 		switch ev.Type {
 		case pubsub.PeerJoin:
-			n.log.With("peer", ev.Peer.String(), "topic", name).Debug("peer JOIN")
+			//n.log.With("peer", ev.Peer.String(), "topic", name).Debug("peer JOIN")
 		case pubsub.PeerLeave:
-			n.log.With("peer", ev.Peer.String(), "topic", name).Debug("peer LEAVE")
+			//n.log.With("peer", ev.Peer.String(), "topic", name).Debug("peer LEAVE")
 		default:
 			n.log.With("peer", ev.Peer.String(), "topic", name).Warn("unknown topic event")
 		}

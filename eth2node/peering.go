@@ -41,6 +41,9 @@ func (n *Eth2Node) peersUpdate(slot Slot) {
 			dials := uint64(0)
 			// TODO: could shuffle backbone peers, but should be mostly random already anyway.
 			for _, id := range backbonePeers {
+				if id == n.h.ID() { // don't dial ourselves.
+					continue
+				}
 				if currentPeerCount+dials >= n.conf.TARGET_PEERS_PER_DAS_SUB {
 					break
 				}

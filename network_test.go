@@ -46,7 +46,7 @@ func TestDAS(t *testing.T) {
 		t.Fatal(err)
 	}
 	slog := log.Sugar()
-	nodeCount := uint64(100)
+	nodeCount := uint64(64)
 	disc := &eth2node.MockDiscovery{
 		Peers: make(map[peer.ID][]ma.Multiaddr),
 	}
@@ -59,7 +59,7 @@ func TestDAS(t *testing.T) {
 			return nil, errors.Wrap(err, "failed to start eth2 node")
 		}
 		start := conf.VALIDATOR_COUNT * nodeIndex / nodeCount
-		end := conf.VALIDATOR_COUNT * nodeIndex / nodeCount
+		end := conf.VALIDATOR_COUNT * (nodeIndex+1) / nodeCount
 		count := end - start
 		indices := make([]beacon.ValidatorIndex, count, count)
 		for i := uint64(0); i < count; i++ {

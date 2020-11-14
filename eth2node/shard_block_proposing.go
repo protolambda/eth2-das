@@ -19,6 +19,7 @@ func (n *Eth2Node) scheduleShardProposalsMaybe(slot Slot) {
 	proposers := n.computeShardProposers(slot)
 	for shard, proposer := range proposers {
 		if _, ok := n.localValidators[proposer]; ok {
+			n.log.With("proposer", proposer, "slot", slot, "shard", shard).Info("proposing shard block")
 			go func() {
 				if err := n.executeShardBlockProposal(slot, Shard(shard), proposer); err != nil {
 					n.log.With(zap.Error(err)).Errorf("proposer %d error for slot %d", proposer, slot)

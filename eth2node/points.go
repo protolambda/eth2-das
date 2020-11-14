@@ -21,12 +21,13 @@ func (c *ExpandedConfig) MakeSamples(data ShardBlockData) ([]ShardBlockDataChunk
 	out := make([]ShardBlockDataChunk, sampleCount, sampleCount)
 	for i := uint64(0); i < sampleCount; i++ {
 		start := i * c.POINTS_PER_SAMPLE
-		sample := out[i]
+		sample := make(ShardBlockDataChunk, c.POINTS_PER_SAMPLE*BYTES_PER_FULL_POINT)
 		for j := uint64(0); j < c.POINTS_PER_SAMPLE; j++ {
 			p := &dataPoints[start+j]
 			raw := verkle.BigNumTo32(p)
 			copy(sample[j*BYTES_PER_FULL_POINT:(j+1)*BYTES_PER_FULL_POINT], raw[:])
 		}
+		out[i] = sample
 	}
 	return out, nil
 }
@@ -68,7 +69,7 @@ func (c *ExpandedConfig) shardDataToPoints(input []byte) ([]Point, error) {
 	extendedDepth := inputDepth + 1
 	// And run the extension process (modifies points in-place, hence above copy)
 	fs := verkle.NewFFTSettings(extendedDepth)
-	fs.DASFFTExtension(points[inputPointsPaddedLen:])
+	fs.DASFFTExtension(extension)
 
 	// And then put the inputs in even positions, and extension in odd positions
 	extendedLength := uint64(1) << extendedDepth

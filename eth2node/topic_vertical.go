@@ -25,6 +25,9 @@ func (n *Eth2Node) vertHandleSubnet(index VerticalIndex, sub *pubsub.Subscriptio
 			sub.Cancel()
 			return
 		}
+		if msg.ReceivedFrom == n.h.ID() { // ignore our own messages
+			return
+		}
 		n.log.With("from", msg.ReceivedFrom, "length", len(msg.Data)).Debug("received message")
 		// TODO verify that what we got is correct
 	}

@@ -47,6 +47,9 @@ func (n *Eth2Node) horzHandleSubnet(index Shard, sub *pubsub.Subscription) {
 			sub.Cancel()
 			return
 		}
+		if msg.ReceivedFrom == n.h.ID() { // ignore our own messages
+			return
+		}
 		n.log.With("from", msg.ReceivedFrom, "length", len(msg.Data)).Debug("received message")
 
 		// TODO
