@@ -31,7 +31,7 @@ func (n *Eth2Node) peersUpdate(slot Slot) {
 			currentPeerCount := uint64(len(n.ps.ListPeers(n.conf.VertTopic(subnet))))
 			backbonePeers := backbone[subnet]
 			if len(backbonePeers) == 0 {
-				n.log.With("topic_peers", currentPeerCount).Warn("Searching for more topic peers, but backbone does not have any for us")
+				n.log.With("topic_peers", currentPeerCount, "subnet", subnet).Warn("Searching for more topic peers, but backbone does not have any for us")
 				break
 			}
 			// TODO: short-term it's more "optimal" to select the backbone peers with similar interests as us.

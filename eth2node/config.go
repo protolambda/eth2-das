@@ -46,8 +46,6 @@ type Config struct {
 
 	// Number of active validators
 	VALIDATOR_COUNT uint64
-	// Physical validator nodes in the p2p network
-	NODE_COUNT uint64
 
 	// Fork digest, put in the topic names
 	ForkDigest [4]byte
@@ -76,6 +74,10 @@ type Config struct {
 	SHARD_HEADERS_TOPIC_SCORE_PARAMS *pubsub.TopicScoreParams
 	GOSSIP_GLOBAL_SCORE_PARAMS       *pubsub.PeerScoreParams
 	GOSSIP_GLOBAL_SCORE_THRESHOLDS   *pubsub.PeerScoreThresholds
+
+	// Network settings
+	ENABLE_NAT                 bool
+	DISABLE_TRANSPORT_SECURITY bool
 }
 
 func (c *Config) Expand() ExpandedConfig {
@@ -84,10 +86,9 @@ func (c *Config) Expand() ExpandedConfig {
 		panic("invalid configuration! Need FAST_INDICES + SLOW_INDICES <= subnets")
 	}
 	return ExpandedConfig{
-		Config:                      *c,
-		SAMPLE_SUBNETS:              subnets,
-		MAX_DATA_SIZE:               BYTES_PER_DATA_POINT * c.POINTS_PER_SAMPLE * c.MAX_SAMPLES_PER_SHARD_BLOCK / 2,
-		AVERAGE_VALIDATORS_PER_NODE: c.VALIDATOR_COUNT / c.NODE_COUNT,
+		Config:         *c,
+		SAMPLE_SUBNETS: subnets,
+		MAX_DATA_SIZE:  BYTES_PER_DATA_POINT * c.POINTS_PER_SAMPLE * c.MAX_SAMPLES_PER_SHARD_BLOCK / 2,
 	}
 }
 
@@ -99,9 +100,6 @@ type ExpandedConfig struct {
 
 	// Max bytes per (unextended) block data blob
 	MAX_DATA_SIZE uint64
-
-	// validators per node
-	AVERAGE_VALIDATORS_PER_NODE uint64
 }
 
 func (conf *ExpandedConfig) ShardHeadersTopic() string {

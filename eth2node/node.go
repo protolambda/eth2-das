@@ -91,13 +91,17 @@ func New(ctx context.Context, conf *Config, disc Discovery, log *zap.SugaredLogg
 	options := []libp2p.Option{
 		libp2p.Transport(tcp.NewTCPTransport),
 		libp2p.Muxer("/mplex/6.7.0", mplex.DefaultTransport),
-		libp2p.Security(noise.ID, noise.New),
-		libp2p.NATManager(basichost.NewNATManager),
 		libp2p.ConnectionManager(connmgr.NewConnManager(int(conf.PEER_COUNT_LO), int(conf.PEER_COUNT_HI), pruneGrace)),
 		// memory peerstore by default
 		// random identity by default
 		libp2p.Ping(false),
 		libp2p.DisableRelay(),
+	}
+	if conf.ENABLE_NAT {
+		options = append(options, libp2p.NATManager(basichost.NewNATManager))
+	}
+	if !conf.DISABLE_TRANSPORT_SECURITY {
+		options = append(options, libp2p.Security(noise.ID, noise.New))
 	}
 
 	h, err := libp2p.New(ctx, options...)
@@ -147,6 +151,10 @@ func New(ctx context.Context, conf *Config, disc Discovery, log *zap.SugaredLogg
 	return n, nil
 }
 
+func (n *Eth2Node) DiscInfo() (peer.ID, []ma.Multiaddr) {
+	return n.h.ID(), n.h.Addrs()
+}
+
 func (n *Eth2Node) RegisterValidators(indices ...ValidatorIndex) {
 	n.validatorsLock.Lock()
 	defer n.validatorsLock.Unlock()
@@ -164,7 +172,7 @@ func (n *Eth2Node) ListValidators() (out []ValidatorIndex) {
 	return
 }
 
-func (n *Eth2Node) Start(ip net.IP, port uint64) error {
+func (n *Eth2Node) Start(ip net.IP, port uint16) error {
 	ipScheme := "ip4"
 	if ip4 := ip.To4(); ip4 == nil {
 		ipScheme = "ip6"
@@ -240,6 +248,10 @@ func (n *Eth2Node) processLoop() {
 				// waiting for genesis, countdown every slot near the end.
 				if slot%10 == 0 || slot < 10 {
 					n.log.With("genesis_time", n.conf.GENESIS_TIME, "slots", slot).Info("Genesis countdown...")
+				}
+				// every 4 slots pre-genesis, look for peers to start with
+				if slot%4 == 0 {
+					n.peersUpdate(0)
 				}
 				continue
 			}

@@ -15,6 +15,9 @@ func (c *ExpandedConfig) MakeSamples(data ShardBlockData) ([]ShardBlockDataChunk
 	if sampleCount*c.POINTS_PER_SAMPLE != uint64(len(dataPoints)) {
 		return nil, fmt.Errorf("bad data-points count %d, expected it to be divisible by sample chunk size: %d", len(dataPoints), c.POINTS_PER_SAMPLE)
 	}
+	if sampleCount > c.SAMPLE_SUBNETS {
+		return nil, fmt.Errorf("too many samples: %d, expected no mora than vertical subnet count: %d", sampleCount, c.SAMPLE_SUBNETS)
+	}
 	out := make([]ShardBlockDataChunk, sampleCount, sampleCount)
 	for i := uint64(0); i < sampleCount; i++ {
 		start := i * c.POINTS_PER_SAMPLE

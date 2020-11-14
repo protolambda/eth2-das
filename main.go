@@ -35,7 +35,6 @@ func das(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 		SHARD_COUNT:                 64,
 		SECONDS_PER_SLOT:            12,
 		VALIDATOR_COUNT:             150000,
-		NODE_COUNT:                  10000,
 		ForkDigest:                  [4]byte{0xaa, 0xbb, 0xcc, 0xdd},
 		TARGET_PEERS_PER_DAS_SUB:    6,
 		PEER_COUNT_LO:               120,
@@ -60,8 +59,9 @@ func das(runenv *runtime.RunEnv, initCtx *run.InitContext) error {
 
 	// Select a subset of validators based on global sequence number of this node.
 	// (TODO: alternatively use testground comms)
-	start := conf.VALIDATOR_COUNT * uint64(initCtx.GlobalSeq) / conf.NODE_COUNT
-	end := conf.VALIDATOR_COUNT * uint64(initCtx.GlobalSeq+1) / conf.NODE_COUNT
+	nodeCount := uint64(100)
+	start := conf.VALIDATOR_COUNT * uint64(initCtx.GlobalSeq) / nodeCount
+	end := conf.VALIDATOR_COUNT * uint64(initCtx.GlobalSeq+1) / nodeCount
 	count := end - start
 	indices := make([]beacon.ValidatorIndex, count, count)
 	for i := uint64(0); i < count; i++ {

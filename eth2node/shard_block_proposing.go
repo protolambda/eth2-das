@@ -6,8 +6,10 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
+	"github.com/pkg/errors"
 	"github.com/protolambda/zrnt/eth2/beacon"
 	"github.com/protolambda/ztyp/codec"
+	"go.uber.org/zap"
 	"io"
 	"math/rand"
 	"time"
@@ -17,7 +19,11 @@ func (n *Eth2Node) scheduleShardProposalsMaybe(slot Slot) {
 	proposers := n.computeShardProposers(slot)
 	for shard, proposer := range proposers {
 		if _, ok := n.localValidators[proposer]; ok {
-			go n.executeShardBlockProposal(slot, Shard(shard), proposer)
+			go func() {
+				if err := n.executeShardBlockProposal(slot, Shard(shard), proposer); err != nil {
+					n.log.With(zap.Error(err)).Errorf("proposer %d error for slot %d", proposer, slot)
+				}
+			}()
 		}
 	}
 }
@@ -44,7 +50,7 @@ func (n *Eth2Node) computeShardProposers(slot Slot) []ValidatorIndex {
 	return out
 }
 
-func (n *Eth2Node) executeShardBlockProposal(slot Slot, shard Shard, proposer ValidatorIndex) {
+func (n *Eth2Node) executeShardBlockProposal(slot Slot, shard Shard, proposer ValidatorIndex) error {
 	// create shard block, with mock data
 	dataSize := n.conf.MAX_DATA_SIZE
 	data := make([]byte, dataSize, dataSize)
@@ -83,10 +89,10 @@ func (n *Eth2Node) executeShardBlockProposal(slot Slot, shard Shard, proposer Va
 	{
 		var buf bytes.Buffer
 		if err := header.Serialize(codec.NewEncodingWriter(&buf)); err != nil {
-
+			return errors.Wrap(err, "proposer failed to encode header")
 		}
 		if err := n.shardHeaders.Publish(ctx, buf.Bytes()); err != nil {
-
+			return errors.Wrap(err, "proposer failed to publish header")
 		}
 	}
 
@@ -94,10 +100,10 @@ func (n *Eth2Node) executeShardBlockProposal(slot Slot, shard Shard, proposer Va
 	{
 		var buf bytes.Buffer
 		if err := block.Serialize(codec.NewEncodingWriter(&buf)); err != nil {
-
+			return errors.Wrap(err, "proposer failed to encode block")
 		}
 		if err := n.horizontalSubnets[shard].Publish(ctx, buf.Bytes()); err != nil {
-
+			return errors.Wrap(err, "proposer failed to publish block to horizontal net")
 		}
 	}
 
@@ -105,10 +111,25 @@ func (n *Eth2Node) executeShardBlockProposal(slot Slot, shard Shard, proposer Va
 	{
 		samples, err := n.conf.MakeSamples(block.Message.Body)
 		if err != nil {
-
+			return errors.Wrap(err, "proposer failed to make samples")
 		}
+		// TODO: how long should the node try to spend on getting a publishing round done before skipping?
+		ctx, _ := context.WithTimeout(n.subProcesses.ctx, 2*time.Second*time.Duration(n.conf.SECONDS_PER_SLOT))
+
 		for i, sample := range samples {
-			// TODO publish
+			go func(i int, sample ShardBlockDataChunk) { // TODO: high parallelism here, maybe too much, might need to change it
+				var buf bytes.Buffer
+				if err := sample.Serialize(codec.NewEncodingWriter(&buf)); err != nil {
+					n.log.With(zap.Error(err)).Error("failed to encode sample for vert net")
+					return
+				}
+				err := n.verticalSubnets[i].Publish(ctx, buf.Bytes())
+				if err != nil {
+					n.log.With(zap.Error(err)).Error("failed to publish to vert net")
+					return
+				}
+			}(i, sample)
 		}
 	}
+	return nil
 }
