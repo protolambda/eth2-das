@@ -18,7 +18,6 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"math"
 	"net"
 	"sync"
 	"time"
@@ -152,6 +151,10 @@ func New(ctx context.Context, conf *Config, disc Discovery, log *zap.SugaredLogg
 	return n, nil
 }
 
+func (n *Eth2Node) Stats() (peerCount uint64) {
+	return uint64(len(n.h.Network().Peers()))
+}
+
 func (n *Eth2Node) DiscInfo() (peer.ID, []ma.Multiaddr) {
 	return n.h.ID(), n.h.Addrs()
 }
@@ -197,45 +200,15 @@ func (n *Eth2Node) Start(ip net.IP, port uint16) error {
 	return nil
 }
 
-func (n *Eth2Node) slotWithOffset(t time.Time, offset time.Duration) (slot Slot, preGenesis bool) {
-	genesisTime := time.Unix(int64(n.conf.GENESIS_TIME), 0)
-	sinceGenesis := t.Add(offset).Sub(genesisTime)
-	slotFloat := math.Floor(sinceGenesis.Seconds() / float64(n.conf.SECONDS_PER_SLOT))
-	if slotFloat < 0 {
-		return Slot(uint64(-slotFloat)), true
-	} else {
-		return Slot(uint64(slotFloat)), false
-	}
-}
-
-func (n *Eth2Node) slotNow() (slot Slot, preGenesis bool) {
-	return n.slotWithOffset(time.Now(), 0)
-}
-
 func (n *Eth2Node) processLoop() {
 	slotDuration := time.Second * time.Duration(n.conf.SECONDS_PER_SLOT)
 
-	genesisTime := time.Unix(int64(n.conf.GENESIS_TIME), 0)
-
-	// adjust the timer to be exactly at the slot boundary
-	d := time.Since(genesisTime) % slotDuration
-	if d < 0 {
-		d += slotDuration
-	}
-
-	// creates a ticker, aligned with genesis slot, ticking every interval, and with some offset to genesis.
-	tickerWithOffset := func(interval time.Duration, offset time.Duration) *time.Ticker {
-		ticker := time.NewTicker(interval)
-		ticker.Reset(d + offset)
-		return ticker
-	}
-
 	// Note that slot ticker can adjust itself and drop slots, if the receiver is slow (i.e. when under heavy load)
-	slotTicker := tickerWithOffset(slotDuration, 0)
+	slotTicker := n.conf.TickerWithOffset(slotDuration, 0)
 	defer slotTicker.Stop()
 
 	// TODO schedule work publishing etc.
-	workTicker := tickerWithOffset(slotDuration, slotDuration/3*2)
+	workTicker := n.conf.TickerWithOffset(slotDuration, slotDuration/3*2)
 
 	for {
 		select {
@@ -243,27 +216,27 @@ func (n *Eth2Node) processLoop() {
 			n.log.Info("stopping work, goodbye!")
 			return
 		case t := <-slotTicker.C: // schedules genesis
-			slot, preGenesis := n.slotWithOffset(t, 0)
+			slot, preGenesis := n.conf.SlotWithOffset(t, 0)
 
 			if preGenesis {
 				// waiting for genesis, countdown every slot near the end.
-				if slot%10 == 0 || slot < 10 {
-					n.log.With("genesis_time", n.conf.GENESIS_TIME, "slots", slot).Info("Genesis countdown...")
-				}
+				//if slot%10 == 0 || slot < 10 {
+				//	n.log.With("genesis_time", n.conf.GENESIS_TIME, "slots", slot).Info("Genesis countdown...")
+				//}
 				// every 4 slots pre-genesis, look for peers to start with
 				if slot%4 == 0 {
 					n.peersUpdate(0)
 				}
 				continue
 			}
-			n.log.With("slot", slot).Debug("slot event!")
+			//n.log.With("slot", slot).Debug("slot event!")
 
 			n.rotateSlowVertSubnets(slot)
 			n.rotateFastVertSubnets(slot)
 			n.peersUpdate(slot)
 		case t := <-workTicker.C:
 			// 1/3 before every slot, prepare and schedule shard blocks
-			slot, preGenesis := n.slotWithOffset(t, slotDuration/3)
+			slot, preGenesis := n.conf.SlotWithOffset(t, slotDuration/3)
 			if preGenesis {
 				continue
 			}
@@ -303,7 +276,7 @@ func (n *Eth2Node) initialSubscriptions() error {
 		return errors.Wrap(err, "failed to subscribe to shard headers topic")
 	}
 	go n.shardHeaderHandler(sub)
-	slot, preGenesis := n.slotNow()
+	slot, preGenesis := n.conf.SlotNow()
 	if preGenesis { // if pre-genesis, just register with the topics we'll have to be around at first
 		slot = 0
 	}

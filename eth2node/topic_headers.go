@@ -21,6 +21,9 @@ func (n *Eth2Node) shardHeaderHandler(sub *pubsub.Subscription) {
 			if err == n.subProcesses.ctx.Err() {
 				return
 			}
+			if err == pubsub.ErrSubscriptionCancelled || err == pubsub.ErrTopicClosed {
+				return
+			}
 			n.log.With(zap.Error(err)).Error("failed to read from shard header subscription")
 			sub.Cancel()
 			return
@@ -28,6 +31,6 @@ func (n *Eth2Node) shardHeaderHandler(sub *pubsub.Subscription) {
 		if msg.ReceivedFrom == n.h.ID() { // ignore our own messages
 			return
 		}
-		n.log.With("from", msg.ReceivedFrom, "length", len(msg.Data)).Debug("received message")
+		n.log.With("from", msg.ReceivedFrom, "length", len(msg.Data)).Debug("received header message")
 	}
 }

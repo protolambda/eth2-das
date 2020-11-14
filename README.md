@@ -36,8 +36,6 @@ Not part of the DAS spec, but for testing purposes:
 | `SHARD_COUNT` | `64` | shards | Number of shards |
 | `SECONDS_PER_SLOT` | `12` | seconds | Number of seconds in each slot |
 | `VALIDATOR_COUNT` | `150000` | validators | Number of active validators |
-| `NODE_COUNT` | `10000` | nodes | Physical validator nodes in the p2p network |
-| `AVERAGE_VALIDATORS_PER_NODE` | `VALIDATOR_COUNT / NODE_COUNT` | validators | validators per node | 
 
 ## License
 

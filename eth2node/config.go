@@ -3,6 +3,8 @@ package eth2node
 import (
 	"fmt"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"math"
+	"time"
 )
 
 const BYTES_PER_DATA_POINT = 31
@@ -78,6 +80,36 @@ type Config struct {
 	// Network settings
 	ENABLE_NAT                 bool
 	DISABLE_TRANSPORT_SECURITY bool
+}
+
+func (c *Config) TickerWithOffset(interval time.Duration, offset time.Duration) *time.Ticker {
+	genesisTime := time.Unix(int64(c.GENESIS_TIME), 0)
+
+	// adjust the timer to be exactly at the interval boundary
+	d := time.Since(genesisTime) % interval
+	if d < 0 {
+		d += interval
+	}
+
+	// creates a ticker, aligned with genesis slot, ticking every interval, and with some offset to genesis.
+	ticker := time.NewTicker(interval)
+	ticker.Reset(d + offset)
+	return ticker
+}
+
+func (c *Config) SlotWithOffset(t time.Time, offset time.Duration) (slot Slot, preGenesis bool) {
+	genesisTime := time.Unix(int64(c.GENESIS_TIME), 0)
+	sinceGenesis := t.Add(offset).Sub(genesisTime)
+	slotFloat := math.Floor(sinceGenesis.Seconds() / float64(c.SECONDS_PER_SLOT))
+	if slotFloat < 0 {
+		return Slot(uint64(-slotFloat)), true
+	} else {
+		return Slot(uint64(slotFloat)), false
+	}
+}
+
+func (c *Config) SlotNow() (slot Slot, preGenesis bool) {
+	return c.SlotWithOffset(time.Now(), 0)
 }
 
 func (c *Config) Expand() ExpandedConfig {

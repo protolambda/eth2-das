@@ -21,6 +21,9 @@ func (n *Eth2Node) vertHandleSubnet(index VerticalIndex, sub *pubsub.Subscriptio
 			if err == n.subProcesses.ctx.Err() {
 				return
 			}
+			if err == pubsub.ErrSubscriptionCancelled || err == pubsub.ErrTopicClosed {
+				return
+			}
 			n.log.With(zap.Error(err)).With("subnet", index).Error("failed to read from subnet subscription")
 			sub.Cancel()
 			return
@@ -28,7 +31,7 @@ func (n *Eth2Node) vertHandleSubnet(index VerticalIndex, sub *pubsub.Subscriptio
 		if msg.ReceivedFrom == n.h.ID() { // ignore our own messages
 			return
 		}
-		n.log.With("from", msg.ReceivedFrom, "length", len(msg.Data)).Debug("received message")
+		n.log.With("from", msg.ReceivedFrom, "index", index, "length", len(msg.Data)).Debug("received vert message")
 		// TODO verify that what we got is correct
 	}
 }

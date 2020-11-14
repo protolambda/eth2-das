@@ -29,28 +29,31 @@ func (n *Eth2Node) subscribeHorzSubnets() {
 	}
 }
 
-func (n *Eth2Node) horzSubnetValidator(index Shard) pubsub.ValidatorEx {
+func (n *Eth2Node) horzSubnetValidator(shard Shard) pubsub.ValidatorEx {
 	return func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
 		// TODO subnet validation
 		return pubsub.ValidationAccept
 	}
 }
 
-func (n *Eth2Node) horzHandleSubnet(index Shard, sub *pubsub.Subscription) {
+func (n *Eth2Node) horzHandleSubnet(shard Shard, sub *pubsub.Subscription) {
 	{
 		msg, err := sub.Next(n.subProcesses.ctx)
 		if err != nil {
 			if err == n.subProcesses.ctx.Err() {
 				return
 			}
-			n.log.With(zap.Error(err)).With("subnet", index).Error("failed to read from subnet subscription")
+			if err == pubsub.ErrSubscriptionCancelled || err == pubsub.ErrTopicClosed {
+				return
+			}
+			n.log.With(zap.Error(err)).With("shard", shard).Error("failed to read from subnet subscription")
 			sub.Cancel()
 			return
 		}
 		if msg.ReceivedFrom == n.h.ID() { // ignore our own messages
 			return
 		}
-		n.log.With("from", msg.ReceivedFrom, "length", len(msg.Data)).Debug("received message")
+		n.log.With("from", msg.ReceivedFrom, "shard", shard, "length", len(msg.Data)).Debug("received horz message")
 
 		// TODO
 		// Each node that receives the shard block on a shard subnet,
